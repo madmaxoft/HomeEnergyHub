@@ -47,6 +47,7 @@ local multipart = requireWithHelp("multipart", "multipart")
 
 -- Load the templates and utils:
 print = require("logger")
+require("svgGraph")
 require("Templates")
 local httpResponse = require("httpResponse")
 local httpRequest = require("httpRequest")

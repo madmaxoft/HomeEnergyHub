@@ -9,123 +9,104 @@
 local httpRequest = require("httpRequest")
 local httpResponse = require("httpResponse")
 local db = require("db")
+local svgGraph = require("svgGraph")
+
+
+
+
+
+--- Converts from DB row format to three array-tables of {timestamp, value} items, for each phase
+local function convertDbRowsToSeries(aDbRows)
+	local seriesA, seriesB, seriesC = {}, {}, {}
+	local na, nb, nc = 0, 0, 0
+	for _, r in ipairs(aDbRows) do
+		if (r.powerA) then
+			na = na + 1
+			seriesA[na] = { r.timeStamp, r.powerA }
+		end
+		if (r.powerB) then
+			nb = nb + 1
+			seriesB[nb] = { r.timeStamp, r.powerB }
+		end
+		if (r.powerC) then
+			nc = nc + 1
+			seriesC[nc] = { r.timeStamp, r.powerC }
+		end
+	end
+	seriesA.n = na
+	seriesB.n = nb
+	seriesC.n = nc
+	return seriesA, seriesB, seriesC
+end
+
+
+
+
+
+--- Returns the maximum value across all series in an array-table of series
+-- Returns 0 if no row in the series
+local function getMaxValueAcrossSeries(aMultipleSeries)
+	local maxV = 0
+	for _, series in ipairs(aMultipleSeries) do
+		for _, row in ipairs(series) do
+			local v = row[2]
+			if (v > maxV) then
+				maxV = v
+			end
+		end
+	end
+	return maxV
+end
 
 
 
 
 
 return function (aClient, aPath, aRequestHeaders)
-	-- Parse path and query
+	-- Parse path and query:
 	local path, query = httpRequest.parseRequestPath(aPath)
-
-	local aInterval = tonumber(query.interval)
+	local interval = tonumber(query.interval)
 	local fromParam = query.from or "now"
-
-	if (not aInterval) then
-		httpResponse.send(aClient, 400, {}, "Missing interval parameter")
-		return
+	if not(interval) then
+		return httpResponse.sendError(aClient, 400, "Missing 'interval' parameter")
 	end
 
-	-- Determine end timestamp
+	-- Determine timestamp range:
 	local endTs
 	if (fromParam == "now") then
 		endTs = os.time()
 	else
 		endTs = tonumber(fromParam)
-		if (not endTs) then
-			httpResponse.send(aClient, 400, {}, "Invalid 'from' parameter")
-			return
+		if not(endTs) then
+			return httpResponse.sendError(aClient, 400, "Invalid 'from' parameter")
 		end
 	end
+	local startTs = endTs - interval
 
-	local startTs = endTs - aInterval
-
-	-- Choose aggregation table
-	local aggTable
-	if (aInterval <= 15 * 60) then
-		aggTable = "ElectricityConsumption" -- raw 5s data
-	elseif (aInterval <= 24 * 60 * 60) then
-		aggTable = "ElectricityConsumptionAggregate15min"
-	else
-		aggTable = "ElectricityConsumptionAggregateDay"
+	-- Get the series to draw:
+	local rows = db.getGraphPowerData(startTs, endTs)
+	local seriesA, seriesB, seriesC = convertDbRowsToSeries(rows)
+	local maxV = getMaxValueAcrossSeries({seriesA, seriesB, seriesC})
+	if (maxV <= 0) then
+		maxV = 1
 	end
 
-	-- Query DB for the interval
-	local sql = [[
-		SELECT timeStamp, powerA, powerB, powerC
-		FROM ]] .. aggTable .. [[
-		WHERE timeStamp >= ? AND timeStamp <= ?
-		ORDER BY timeStamp ASC
-	]]
-	local rows = db.getArrayFromQuery(sql, {startTs, endTs}, "graphHandler query")
-
-	-- SVG parameters
-	local width, height = 900, 300
-	local padding = 40
-
-	local function scaleX(ts)
-		return padding + ((ts - startTs) / (endTs - startTs)) * (width - 2*padding)
+	-- Create SVG graph:
+	local width  = 1500
+	local height = 500
+	local graph = svgGraph:new(width, height, startTs, endTs)
+	graph:setMaxValue(maxV)
+	if (query.background ~= "none") then
+		graph:drawBackgroundGrid()
 	end
-
-	local function scaleY(p)
-		local maxP = 10000  -- adjust dynamically if needed
-		return height - padding - (p / maxP) * (height - 2*padding)
+	if (query.axislabels ~= "none") then
+		graph:drawAxisLabels()
 	end
+	graph:drawSeries(seriesA, "#cc0000")
+	graph:drawSeries(seriesB, "#008800")
+	graph:drawSeries(seriesC, "#0000cc")
 
-	local colors = {A="#f00", B="#0a0", C="#00f"}
-
-	local tbl, n = {}, 0
-
-	-- Add SVG header
-	n = n + 1
-	tbl[n] = string.format('<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d">', width, height)
-	n = n + 1
-	tbl[n] = string.format('<rect width="100%%" height="100%%" fill="white"/>')
-
-	-- Add axes in one block
-	local axes = {}
-	axes[1] = string.format('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="black"/>', padding, height-padding, width-padding, height-padding)
-	axes[2] = string.format('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="black"/>', padding, padding, padding, height-padding)
-	n = n + #axes
-	for i=1,#axes do
-		tbl[n - #axes + i] = axes[i]
-	end
-
-	-- Function to draw line for a column with gaps
-	local function drawLine(aCol)
-		local pathTbl, m = {}, 0
-		local started = false
-		for i,row in ipairs(rows) do
-			local val = row[aCol]
-			if (val) then
-				local x = scaleX(row.timeStamp)
-				local y = scaleY(val)
-				if (not started) then
-					m = m + 1
-					pathTbl[m] = string.format("M %.2f %.2f", x, y)
-					started = true
-				else
-					m = m + 1
-					pathTbl[m] = string.format("L %.2f %.2f", x, y)
-				end
-			else
-				started = false
-			end
-		end
-		return table.concat(pathTbl, " ")
-	end
-
-	-- Draw lines for each phase
-	for _, colName in ipairs({"powerA","powerB","powerC"}) do
-		local path = drawLine(colName)
-		local color = colors[colName:sub(-1)]
-		n = n + 1
-		tbl[n] = string.format('<path d="%s" fill="none" stroke="%s" stroke-width="1.5"/>', path, color)
-	end
-
-	-- Close SVG
-	n = n + 1
-	tbl[n] = '</svg>'
-
-	httpResponse.send(aClient, 200, {["Content-Type"]="image/svg+xml"}, table.concat(tbl,"\n"))
+	-- Send the resulting SVG data to the client:
+	local svgString = graph:finish()
+	httpResponse.send(aClient, 200, { ["Content-Type"] = "image/svg+xml" }, svgString)
 end

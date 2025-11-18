@@ -226,6 +226,45 @@ end
 
 
 
+--- Returns array-table with timeStamp, powerA, powerB, powerC and powerTotal in between the specified
+-- timestamps, for creating a power graph.
+-- A proper aggregation table is chosen to best represent the data in the graph
+function db.getGraphPowerData(aStartTs, aEndTs)
+	assert(type(aStartTs) == "number")
+	assert(type(aEndTs) == "number")
+	assert(aStartTs < aEndTs)
+
+	-- Choose aggregation table:
+	local aggTable, aggTableColumns
+	local interval = aEndTs - aStartTs
+	if (interval <= 10 * 60) then
+		aggTable = "ElectricityConsumption" -- raw 5s data
+		aggTableColumns = "powerA, powerB, powerC"
+	elseif (interval <= 24 * 60 * 60) then
+		aggTable = "ElectricityConsumptionAggregate1min"
+		aggTableColumns = "maxPowerA AS powerA, maxPowerB AS powerB, maxPowerC AS powerC, maxPowerTotal AS powerTotal"
+	elseif (interval <= 31 * 24 * 60 * 60) then
+		aggTable = "ElectricityConsumptionAggregate15min"
+		aggTableColumns = "avgPowerA AS powerA, avgPowerB AS powerB, avgPowerC AS powerC, avgPowerTotal AS powerTotal"
+	else
+		aggTable = "ElectricityConsumptionAggregateDay"
+		aggTableColumns = "avgPowerA AS powerA, avgPowerB AS powerB, avgPowerC AS powerC, avgPowerTotal AS powerTotal"
+	end
+
+	-- Query DB for the interval:
+	local sql = [[
+		SELECT timeStamp, ]] .. aggTableColumns .. [[
+		FROM ]] .. aggTable .. [[
+		WHERE timeStamp >= ? AND timeStamp <= ?
+		ORDER BY timeStamp ASC
+	]]
+	return db.getArrayFromQuery(sql, {aStartTs, aEndTs}, "getGraphPowerData")
+end
+
+
+
+
+
 --- Returns a single number representing the latest timestamp in the ElectricityConsumption table
 -- Returns nil if no data in the table
 function db.getLastElectricityConsumptionMeasurementTimestamp()

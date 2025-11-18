@@ -102,6 +102,8 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 			if (agg) then
 				db.insertAggregate(aTargetTable, startTs, agg)
 			else
+				-- Cannot aggregate the bucket, it is incomplete yet. Avoid busy-loop on end-of-data
+				copas.sleep(10)
 			end
 			copas.sleep(0.01)  -- Avoid busy loop
 		else

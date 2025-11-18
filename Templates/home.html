@@ -1,0 +1,12 @@
+<html>
+<head>
+<title>HomeEnergyHub</title>
+<link rel="stylesheet" href="/Static/main.css" />
+</head>
+
+<body>
+<h1>HomeEnergyHub</h1>
+
+<p>Last measurement: <%= (lastMeasurementTimestamp and os.date("%Y-%m-%d %H:%M:%S", lastMeasurementTimestamp) or "") %></p>
+
+</body>

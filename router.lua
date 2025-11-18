@@ -23,6 +23,7 @@ router.routes = {
 	{ method = "GET",  path = "/static/", handler = require("Handlers.static") },
 	{ method = "GET",  path = "/Static/", handler = require("Handlers.static") },
 	{ method = "GET",  path = "/favicon", handler = require("Handlers.favicon") },
+	{ method = "GET",  path = "/graph?",  handler = require("Handlers.graph") },
 	{ method = "GET",  path = "/",        handler = require("Handlers.home") },
 }
 

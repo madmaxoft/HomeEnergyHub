@@ -4,13 +4,20 @@
 --]]
 
 local db = require("db")
+local httpResponse = require("httpResponse")
 
 
 
 
-return function (aClient)
+
+return function (aClient, aPath)
+	if (aPath ~= "/") then
+		httpResponse.sendError(aClient, 404, "Not found")
+	end
+
 	local body = require("Templates").home({
-		lastMeasurementTimestamp = db.getLastElectricityConsumptionMeasurementTimestamp()
+		latestMeasurement = db.getLatestElectricityConsumptionMeasurement() or {},
+		currentTime = os.time(),
 	})
-	require("httpResponse").send(aClient, "200 OK", nil, body)
+	httpResponse.send(aClient, "200 OK", nil, body)
 end

@@ -1,12 +1,95 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<title>HomeEnergyHub</title>
-<link rel="stylesheet" href="/Static/main.css" />
+	<meta charset="UTF-8">
+	<title>Home Energy Hub</title>
+	<link rel="stylesheet" href="/static/main.css">
 </head>
+<%
+local function formatPower(aValue)
+	if not(aValue) then
+		return ""
+	end
+	return string.format("%.1f", aValue)
+end
 
+local function formatEnergy(aValue)
+	if not(aValue) then
+		return ""
+	end
+	return string.format("%.3f", aValue)
+end
+local function formatTimeDiff(aDiff)
+	if (aDiff > 3600) then
+		local hours = math.floor(aDiff / 3600)
+		local minutes = math.floor((aDiff % 3600) / 60)
+		return string.format("%d hours and %d minutes", hours, minutes)
+	end
+	local minutes = math.floor(aDiff / 60)
+	return string.format("%d minutes", hours, minutes)
+end
+%>
 <body>
-<h1>HomeEnergyHub</h1>
 
-<p>Last measurement: <%= (lastMeasurementTimestamp and os.date("%Y-%m-%d %H:%M:%S", lastMeasurementTimestamp) or "") %></p>
+<h1>Home Energy Hub</h1>
+
+<h2>Latest Measurement</h2>
+<% if (latestMeasurement.timeStamp) then %>
+	<p>Time: <%= os.date("%Y-%m-%d %H:%M:%S", latestMeasurement.timeStamp) %>
+	<% if (currentTime - latestMeasurement.timeStamp > 120) then %>
+		(<%= formatTimeDiff(currentTime - latestMeasurement.timeStamp) %> ago)
+	<% end %>
+	</p>
+<% end %>
+<table>
+	<tr>
+		<th></th>
+		<th>Power (W)</th>
+		<th>Energy (kWh)</th>
+	</tr>
+	<tr>
+		<th>Phase A</th>
+		<td class="power"><%= formatPower(latestMeasurement.powerA) %></td>
+		<td class="energy"><%= formatEnergy(latestMeasurement.energyA) %></td>
+	</tr>
+	<tr>
+		<th>Phase B</th>
+		<td class="power"><%= formatPower(latestMeasurement.powerB) %></td>
+		<td class="energy"><%= formatEnergy(latestMeasurement.energyB) %></td>
+	</tr>
+	<tr>
+		<th>Phase C</th>
+		<td class="power"><%= formatPower(latestMeasurement.powerC) %></td>
+		<td class="energy"><%= formatEnergy(latestMeasurement.energyC) %></td>
+	</tr>
+	<tr>
+		<th>Total</th>
+		<td class="power"><%= formatPower(latestMeasurement.powerTotal) %></td>
+		<td class="energy"><%= formatEnergy(latestMeasurement.energyTotal) %></td>
+	</tr>
+</table>
+
+<h2>Graphs</h2>
+
+<div class="graph-block">
+	<div class="graph-title">Last 10 Minutes</div>
+	<img class="graph" src="/graph?interval=600&from=now" alt="Graph: Last 10 Minutes" border=1>
+</div>
+
+<div class="graph-block">
+	<div class="graph-title">Last 24 Hours</div>
+	<img class="graph" src="/graph?interval=86400&from=now" alt="Graph: Last 24 Hours">
+</div>
+
+<div class="graph-block">
+	<div class="graph-title">Last 30 Days</div>
+	<img class="graph" src="/graph?interval=2592000&from=now" alt="Graph: Last 30 Days">
+</div>
+
+<div class="graph-block">
+	<div class="graph-title">Last 1 Year</div>
+	<img class="graph" src="/graph?interval=31536000&from=now" alt="Graph: Last 1 Year">
+</div>
 
 </body>
+</html>

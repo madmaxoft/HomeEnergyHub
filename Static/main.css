@@ -1,0 +1,32 @@
+/* Mimic the look of <table border=1 cellspacing=0 cellpadding=2>: */
+
+table {
+	border-collapse: separate;
+	border-spacing: 0;
+	border-top: 1px solid #ccc;
+	border-left: 1px solid #ccc;
+	border-bottom: 1px solid #555;
+	border-right: 1px solid #555;
+}
+
+table th,
+table td {
+	padding: 2px;
+	border-top: 1px solid #555;
+	border-left: 1px solid #555;
+	border-bottom: 1px solid #ccc;
+	border-right: 1px solid #ccc;
+}
+
+table th {
+	font-weight: bold;
+}
+
+
+
+
+
+/* Styles for rows displaying values: */
+.energy, .power {
+	text-align: right;
+}

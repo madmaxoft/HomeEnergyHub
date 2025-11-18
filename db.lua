@@ -240,6 +240,24 @@ end
 
 
 
+--- Returns the latest DB row in the ElectricityConsumption table
+-- Returns nil if no data in the table
+function db.getLatestElectricityConsumptionMeasurement()
+	local res = db.getArrayFromQuery([[
+		SELECT timeStamp, powerTotal, powerA, powerB, powerC, energyTotal, energyA, energyB, energyC
+		FROM ElectricityConsumption
+		ORDER BY timeStamp DESC LIMIT 1
+	]], {}, "getLastElectricityConsumption")
+	if (not(res) or (res.n < 1)) then
+		return nil
+	end
+	return res[1]
+end
+
+
+
+
+
 --- Returns the timestamp of the latest bucket missing from aTargetTable
 -- Uses two-step query to simplify SQL and avoid SQLite CTE quirks
 function db.getLatestMissingAggregateBucket(aTargetTable, aIntervalSeconds)

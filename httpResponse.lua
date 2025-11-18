@@ -74,9 +74,9 @@ function httpResponse.sendError(aClient, aErrorCode, aErrorText)
 	local html = errorTemplate({errorText = aErrorText, errorCode = aErrorCode})
 	aClient:send(string.format("HTTP/1.1 %d\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n",
 		aErrorCode,
-		#aContent
+		#html
 	))
-	aClient:send(aContent)
+	aClient:send(html)
 end
 
 

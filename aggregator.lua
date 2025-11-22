@@ -61,14 +61,14 @@ local function calcAggregationForBucket(aStartTs, aEndTs)
 	end
 	local factor = 3600 / (aEndTs - aStartTs) * 1000  -- Convert kWh over interval to W
 	return {
-		avgPowerTotal = (energy.energyTotal or 0) * factor,
-		avgPowerA = (energy.energyA or 0) * factor,
-		avgPowerB = (energy.energyB or 0) * factor,
-		avgPowerC = (energy.energyC or 0) * factor,
+		avgPowerTotal = energy.energyTotal and (energy.energyTotal * factor),
+		avgPowerA = energy.energyA and (energy.energyA * factor),
+		avgPowerB = energy.energyB and (energy.energyB * factor),
+		avgPowerC = energy.energyC and (energy.energyC * factor),
 		energyTotal = energy.energyTotal or 0,
-		energyA = energy.energyA or 0,
-		energyB = energy.energyB or 0,
-		energyC = energy.energyC or 0,
+		energyA = energy.energyA,
+		energyB = energy.energyB,
+		energyC = energy.energyC,
 		minPowerTotal = energy.minPowerTotal,
 		minPowerA = energy.minPowerA,
 		minPowerB = energy.minPowerB,
@@ -90,6 +90,7 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 	assert(type(aIntervalSeconds) == "number")
 	assert(type(aTargetTable) == "string")
 
+	local numLoops = 0
 	while not(copas.exiting()) do
 		if (aggregator.shouldPause) then
 			copas.sleep(5)
@@ -103,10 +104,17 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 				db.insertAggregate(aTargetTable, startTs, agg)
 			else
 				-- Cannot aggregate the bucket, it is incomplete yet. Avoid busy-loop on end-of-data
+				print(string.format("[aggregator %d] Cannot aggregate bucket at %s", aIntervalSeconds, os.date("%Y-%m-%d %H:%M:%S", startTs)))
 				copas.sleep(10)
 			end
-			copas.sleep(0.01)  -- Avoid busy loop
+			numLoops = (numLoops + 1) % 100
+			if (numLoops == 0) then
+				copas.sleep(1)  -- Occasionally pause for longer to let other tasks run, too
+			else
+				copas.sleep(0.01)  -- Avoid busy loop
+			end
 		else
+			print(string.format("[aggregator %d] No more available buckets in DB", aIntervalSeconds))
 			copas.sleep(30)
 		end
 		::continueLoop::

@@ -174,113 +174,112 @@ end
 
 
 
---- Returns the energy deltas for a given bucket using raw data, and the min / max power
--- Returns a dict-table of energyTotal, energyA, energyB, energyC numbers representing the kWh consumed,
--- minPowerTotal, minPowerA, ... representing the minimum power (W),
--- maxPowerTotal, maxPowerA, ... representing the maximum power (W)
--- within the specified timestamp window
--- Returns nil if not enough data to determine the energy
+--- Returns the energy deltas (for any available phases) and min/max power for a bucket
+-- Returns a dict-table containing:
+--   energyTotal, energyA, energyB, energyC   (only if computable; otherwise nil)
+--   minPowerTotal, minPowerA, ...            (always present)
+-- Returns nil if NO energy values can be computed at all.
 function db.getBucketEnergyAndPower(aStartTs, aEndTs)
-	-- Helper: linear interpolation for all energy values
-	local function interpolateEnergy(aBefore, aAfter, aTs)
-		if (aBefore.timeStamp == aAfter.timeStamp) then
-			return {
-				energyTotal = aBefore.energyTotal,
-				energyA = aBefore.energyA,
-				energyB = aBefore.energyB,
-				energyC = aBefore.energyC
-			}
+
+	--- Helper: interpolate a single numeric field, return nil if cannot interpolate
+	local function interpField(beforeVal, afterVal, tBefore, tAfter, tTarget)
+		if (not(beforeVal) or not(afterVal)) then
+			return nil
 		end
-		local factor = (aTs - aBefore.timeStamp) / (aAfter.timeStamp - aBefore.timeStamp)
+		if (tBefore == tAfter) then
+			return beforeVal
+		end
+		local f = (tTarget - tBefore) / (tAfter - tBefore)
+		return (afterVal - beforeVal) * f + beforeVal
+	end
+
+	--- Helper: interpolate a full energy row (per field)
+	local function interpolateEnergy(b, a, tTarget)
 		return {
-			energyTotal = (aAfter.energyTotal - aBefore.energyTotal) * factor + aBefore.energyTotal,
-			energyA = (aAfter.energyA - aBefore.energyA) * factor + aBefore.energyA,
-			energyB = (aAfter.energyB - aBefore.energyB) * factor + aBefore.energyB,
-			energyC = (aAfter.energyC - aBefore.energyC) * factor + aBefore.energyC
+			energyTotal = interpField(b.energyTotal, a.energyTotal, b.timeStamp, a.timeStamp, tTarget),
+			energyA     = interpField(b.energyA,     a.energyA,     b.timeStamp, a.timeStamp, tTarget),
+			energyB     = interpField(b.energyB,     a.energyB,     b.timeStamp, a.timeStamp, tTarget),
+			energyC     = interpField(b.energyC,     a.energyC,     b.timeStamp, a.timeStamp, tTarget),
 		}
 	end
 
-	-- Get nearest raw row <= start
-	local sqlBeforeStart = [[
-		SELECT * FROM ElectricityConsumption
-		WHERE timeStamp <= ? AND energyTotal IS NOT NULL AND energyA IS NOT NULL AND energyB IS NOT NULL AND energyC IS NOT NULL
+	-- Query the raw data at interval boundaries:
+	local sqlBefore = [[
+		SELECT *
+		FROM ElectricityConsumption
+		WHERE timeStamp <= ?
 		ORDER BY timeStamp DESC
 		LIMIT 1
 	]]
-	local rowsBeforeStart = db.getArrayFromQuery(sqlBeforeStart, {aStartTs}, "getBucketEnergy start before")
-	local rowBeforeStart = (rowsBeforeStart and #rowsBeforeStart > 0) and rowsBeforeStart[1] or nil
 
-	-- Get nearest raw row >= start
-	local sqlAfterStart = [[
-		SELECT * FROM ElectricityConsumption
-		WHERE timeStamp >= ? AND energyTotal IS NOT NULL AND energyA IS NOT NULL AND energyB IS NOT NULL AND energyC IS NOT NULL
+	local sqlAfter = [[
+		SELECT *
+		FROM ElectricityConsumption
+		WHERE timeStamp >= ?
 		ORDER BY timeStamp ASC
 		LIMIT 1
 	]]
-	local rowsAfterStart = db.getArrayFromQuery(sqlAfterStart, {aStartTs}, "getBucketEnergy start after")
-	local rowAfterStart = (rowsAfterStart and #rowsAfterStart > 0) and rowsAfterStart[1] or nil
 
-	if (not(rowBeforeStart) or not(rowAfterStart)) then
+	local rowsBeforeStart = db.getArrayFromQuery(sqlBefore, {aStartTs}, "getBucketEnergyAndPower energy start before")
+	local rowsAfterStart  = db.getArrayFromQuery(sqlAfter,  {aStartTs}, "getBucketEnergyAndPower energy start after")
+	local rowsBeforeEnd   = db.getArrayFromQuery(sqlBefore, {aEndTs},   "getBucketEnergyAndPower energy end before")
+	local rowsAfterEnd    = db.getArrayFromQuery(sqlAfter,  {aEndTs},   "getBucketEnergyAndPower energy end after")
+
+	local bStart = rowsBeforeStart[1]
+	local aStart = rowsAfterStart[1]
+	local bEnd   = rowsBeforeEnd[1]
+	local aEnd   = rowsAfterEnd[1]
+
+	if not(bStart and aStart and bEnd and aEnd) then
+		-- Absolutely no interpolation possible
 		return nil
 	end
-	local startEnergy = interpolateEnergy(rowBeforeStart, rowAfterStart, aStartTs)
 
-	-- Get nearest raw row <= end:
-	local sqlBeforeEnd = [[
-		SELECT * FROM ElectricityConsumption
-		WHERE timeStamp <= ? AND energyTotal IS NOT NULL AND energyA IS NOT NULL AND energyB IS NOT NULL AND energyC IS NOT NULL
-		ORDER BY timeStamp DESC
-		LIMIT 1
-	]]
-	local rowsBeforeEnd = db.getArrayFromQuery(sqlBeforeEnd, {aEndTs}, "getBucketEnergy end before")
-	local rowBeforeEnd = (rowsBeforeEnd and #rowsBeforeEnd > 0) and rowsBeforeEnd[1] or nil
+	-- Interpolate start/end energy per field:
+	local energyStart = interpolateEnergy(bStart, aStart, aStartTs)
+	local energyEnd   = interpolateEnergy(bEnd,   aEnd,   aEndTs)
 
-	-- Get nearest raw row >= end:
-	local sqlAfterEnd = [[
-		SELECT * FROM ElectricityConsumption
-		WHERE timeStamp >= ? AND energyTotal IS NOT NULL AND energyA IS NOT NULL AND energyB IS NOT NULL AND energyC IS NOT NULL
-		ORDER BY timeStamp ASC
-		LIMIT 1
-	]]
-	local rowsAfterEnd = db.getArrayFromQuery(sqlAfterEnd, {aEndTs}, "getBucketEnergy end after")
-	local rowAfterEnd = (rowsAfterEnd and #rowsAfterEnd > 0) and rowsAfterEnd[1] or nil
-
-	if (not(rowBeforeEnd) or not(rowAfterEnd)) then
-		return nil
-	end
-	local endEnergy = interpolateEnergy(rowBeforeEnd, rowAfterEnd, aEndTs)
-
-	-- Calculate the delta:
+	-- Compute deltas only where both start+end are valid
 	local function delta(vEnd, vStart)
 		if (not(vEnd) or not(vStart)) then
-			return 0
+			return nil  -- this phase cannot be computed
 		end
 		local d = vEnd - vStart
-		return (d >= 0) and d or 0  -- optionally handle wrap/reset
+		return (d >= 0) and d or 0
 	end
 
+	local energyTotal = delta(energyEnd.energyTotal, energyStart.energyTotal)
+	local energyA     = delta(energyEnd.energyA,     energyStart.energyA)
+	local energyB     = delta(energyEnd.energyB,     energyStart.energyB)
+	local energyC     = delta(energyEnd.energyC,     energyStart.energyC)
+
+	-- If all energies are nil -> return nil
+	if not(energyTotal or energyA or energyB or energyC) then
+		return nil
+	end
+
+	-- Query power min/max (always safe):
 	local rows = db.getArrayFromQuery([[
 		SELECT
-			MIN(powerA)  AS minPowerA,
-			MAX(powerA)  AS maxPowerA,
-			MIN(powerB)  AS minPowerB,
-			MAX(powerB)  AS maxPowerB,
-			MIN(powerC)  AS minPowerC,
-			MAX(powerC)  AS maxPowerC,
-			MIN(powerTotal) AS minPowerTotal,
-			MAX(powerTotal) AS maxPowerTotal
+			MIN(powerA)       AS minPowerA,
+			MAX(powerA)       AS maxPowerA,
+			MIN(powerB)       AS minPowerB,
+			MAX(powerB)       AS maxPowerB,
+			MIN(powerC)       AS minPowerC,
+			MAX(powerC)       AS maxPowerC,
+			MIN(powerTotal)   AS minPowerTotal,
+			MAX(powerTotal)   AS maxPowerTotal
 		FROM ElectricityConsumption
-		WHERE (timeStamp >= ?) AND (timeStamp < ?);
-	]], {aStartTs, aEndTs}, "getBucketEnergyAndPower.minmax")
-	assert(type(rows) == "table")
-	assert(type(rows[1]) == "table")
-	local row = rows[1]
+		WHERE timeStamp >= ? AND timeStamp < ?
+	]], {aStartTs, aEndTs}, "getBucketEnergyAndPower energy minmax")[1]
 
-	row.energyTotal = delta(endEnergy.energyTotal, startEnergy.energyTotal)
-	row.energyA = delta(endEnergy.energyA, startEnergy.energyA)
-	row.energyB = delta(endEnergy.energyB, startEnergy.energyB)
-	row.energyC = delta(endEnergy.energyC, startEnergy.energyC)
-	return row
+	-- Return combined row, including ONLY the energy fields we could compute:
+	rows.energyTotal = energyTotal
+	rows.energyA     = energyA
+	rows.energyB     = energyB
+	rows.energyC     = energyC
+
+	return rows
 end
 
 

@@ -11,6 +11,55 @@ local conn = nil
 
 
 
+--- Dict-table of aggregationSeconds -> table name containing the aggregated data
+local gElectricityConsumptionAggregationToTableName = {
+	[5] = "ElectricityConsumption",
+	[60] = "ElectricityConsumptionAggregate1min",
+	[15 * 60] = "ElectricityConsumptionAggregate15min",
+	[24 * 60 * 60] = "ElectricityConsumptionAggregateDay",
+}
+
+
+
+
+
+--- Helper dict-table of columnName -> true for all valid columns for all aggregation tables
+local gElectricityConsumptionAggregationValidColumns = {
+	maxPowerA = true,
+	maxPowerB = true,
+	maxPowerC = true,
+	maxPowerTotal = true,
+	minPowerA = true,
+	minPowerB = true,
+	minPowerC = true,
+	minPowerTotal = true,
+	avgPowerA = true,
+	avgPowerB = true,
+	avgPowerC = true,
+	avgPowerTotal = true,
+}
+
+
+
+
+
+--- Dict-table of aggregationSeconds -> columnName -> true for all valid columns
+local gElectricityConsumptionAggregationValidColumnNames = {
+	[5] = {
+		powerA = true,
+		powerB = true,
+		powerC = true,
+		powerTotal = true,
+	},
+	[60]           = gElectricityConsumptionAggregationValidColumns,
+	[15 * 60]      = gElectricityConsumptionAggregationValidColumns,
+	[24 * 60 * 60] = gElectricityConsumptionAggregationValidColumns,
+}
+
+
+
+
+
 --- Ensures an open DB connection
 local function ensureDb()
 	if not(conn) then
@@ -232,6 +281,44 @@ function db.getBucketEnergyAndPower(aStartTs, aEndTs)
 	row.energyB = delta(endEnergy.energyB, startEnergy.energyB)
 	row.energyC = delta(endEnergy.energyC, startEnergy.energyC)
 	return row
+end
+
+
+
+
+
+--- Returns array-table or {timeStamp, value} in between the specified timestamps, for creating a power graph.
+-- The values are queries from a table represented by the aggregation parameter, from the specified column name
+-- Returns nil, errorMsg in case of bad parameters. Raises an error on DB errors.
+-- Adjusts aStartTs and aEndTs to include values just-before-start and just-after-end to account for
+-- them not being exactly on aggregation boundary
+function db.getGraphPowerColumnData(aStartTs, aEndTs, aColumnName, aAggregationSec)
+	assert(type(aStartTs) == "number")
+	assert(type(aEndTs) == "number")
+	assert(type(aColumnName) == "string")
+	assert(type(aAggregationSec) == "number")
+
+	-- Check the validity of the parameters:
+	local tableName = gElectricityConsumptionAggregationToTableName[aAggregationSec]
+	if not(tableName) then
+		return nil, "Invalid aggregation: " .. aAggregationSec
+	end
+	if (
+		not(gElectricityConsumptionAggregationValidColumnNames[aAggregationSec]) or
+		not(gElectricityConsumptionAggregationValidColumnNames[aAggregationSec][aColumnName])
+	) then
+		return nil, "Invalid column name: " .. aColumnName
+	end
+
+	-- Adjust the timestamps by aggregation:
+	local startTs = aStartTs - (aStartTs % aAggregationSec)
+	local endTs = (aEndTs + aAggregationSec - 1) - ((aEndTs + aAggregationSec - 1) % aAggregationSec)
+
+	return db.getArrayFromQuery([[
+		SELECT timeStamp, ]] .. aColumnName .. [[ as value
+		FROM ]] .. tableName .. [[
+		WHERE timeStamp >= ? AND timeStamp <= ?
+	]], {startTs, endTs}, "getGraphPowerColumnData")
 end
 
 

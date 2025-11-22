@@ -73,22 +73,27 @@ end
 
 <div class="graph-block">
 	<div class="graph-title">Last 10 Minutes</div>
-	<img class="graph" src="/graph?interval=600&from=now" alt="Graph: Last 10 Minutes">
+	<img width=1500 height=500 class="graph" src="/graph?width=1500&height=500&interval=600&from=now&def=powerA-5-c00;powerB-5-080;powerC-5-00c;powerTotal-5-000" alt="Graph: Last 10 Minutes, raw">
 </div>
 
 <div class="graph-block">
-	<div class="graph-title">Last 24 Hours</div>
-	<img class="graph" src="/graph?interval=86400&from=now" alt="Graph: Last 24 Hours">
+	<div class="graph-title">Last 24 Hours, by 1 minute</div>
+	<img width=1500 height=500 class="graph" src="/graph?width=1500&height=500&interval=86400&from=now&def=avgPowerA-60-c00;avgPowerB-60-080;avgPowerC-60-00c;avgPowerTotal-60-000" alt="Graph: Last 24 Hours, by 1 minute">
+</div>
+
+<div class="graph-block">
+	<div class="graph-title">Last 24 Hours, by 15 minutes</div>
+	<img width=1500 height=500 class="graph" src="/graph?width=1500&height=500&interval=86400&from=now&def=avgPowerA-900-c00;avgPowerB-900-080;avgPowerC-900-00c;avgPowerTotal-900-000" alt="Graph: Last 24 Hours, by 15 minutes">
 </div>
 
 <div class="graph-block">
 	<div class="graph-title">Last 30 Days</div>
-	<img class="graph" src="/graph?interval=2592000&from=now" alt="Graph: Last 30 Days">
+	<img width=1500 height=500 class="graph" src="/graph?width=1500&height=500&interval=2592000&from=now&def=avgPowerA-900-c00;avgPowerB-900-080;avgPowerC-900-00c;avgPowerTotal-900-000" alt="Graph: Last 30 Days, by 15 minutes">
 </div>
 
 <div class="graph-block">
 	<div class="graph-title">Last 1 Year</div>
-	<img class="graph" src="/graph?interval=31536000&from=now" alt="Graph: Last 1 Year">
+	<img width=1500 height=500 class="graph" src="/graph?width=1500&height=500&interval=31536000&from=now&def=avgPowerA-86400-c00;avgPowerB-86400-080;avgPowerC-86400-00c;avgPowerTotal-86400-000" alt="Graph: Last 1 Year, by day">
 </div>
 
 </body>

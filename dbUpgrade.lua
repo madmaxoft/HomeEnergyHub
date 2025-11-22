@@ -111,7 +111,7 @@ end
 
 
 --- Creates a backup copy of the DB file before upgrade
-local function backupDbFile(aDbPath)
+function dbUpgrade.backupDbFile(aDbPath)
 	local time = os.time()
 	local timeStamp = os.date("%Y%m%d-%H%M%S", time)
 	local year = os.date("%Y", time)
@@ -121,7 +121,7 @@ local function backupDbFile(aDbPath)
 	lfs.mkdir("Backups/" .. year .. "/" .. day)
 	local backupPath = "Backups/" .. year .. "/" .. day .. "/" .. aDbPath:gsub("%.sqlite$", "") .. "-" .. timeStamp .. ".sqlite"
 	print("[DB] Creating backup: " .. backupPath)
-	dbUpgrade.copyFile(aDbPath, backupPath)
+	copyFile(aDbPath, backupPath)
 end
 
 
@@ -195,7 +195,7 @@ function dbUpgrade.upgradeIfNeeded(aDbFileName)
 
 	-- Backup the current DB file:
 	if (current >= 0) then
-		backupDbFile(aDbFileName)
+		dbUpgrade.backupDbFile(aDbFileName)
 	end
 	conn = sqlite3.open(aDbFileName)
 	conn:busy_timeout(1000)

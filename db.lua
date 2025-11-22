@@ -63,6 +63,18 @@ end
 
 
 
+--- Creates a backup of the DB file
+-- Can only be called when the DB is closed, either before it is open for the first time, or after calling db.close()
+function db.backup()
+	assert(not(conn))  -- Is DB closed?
+
+	require("dbUpgrade").backupDbFile(dbFile)
+end
+
+
+
+
+
 --- Executes the specified statement, binding the specified values to it.
 -- aDescription is used for error logging.
 function db.execBoundStatement(aSql, aValuesToBind, aDescription)
@@ -383,6 +395,44 @@ function db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
 		aAggregatedMeasurement.energyC,
 		n = 17
 	}, "insertAggregate." .. aTableName)
+end
+
+
+
+
+
+--- Saves multiple 5-second buckets of electricity measurement (rows in ElectricityConsumption table)
+-- Each aMeasurements[i] is a dict-able of DB column name -> value, with some columns possibly missing, and with a timeStamp
+function db.saveMultipleElectricityMeasurements(aMeasurements)
+	assert(type(aMeasurements) == "table")
+
+	local c = ensureDb()
+	checkSql(c, c:exec("BEGIN TRANSACTION"), "saveMultipleElectricityMeasurements.begin")
+	local stmt = c:prepare([[
+		INSERT OR REPLACE INTO ElectricityConsumption (timeStamp, powerTotal, powerA, powerB, powerC, energyTotal, energyA, energyB, energyC)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	]])
+	if not(stmt) then
+		error("Failed to prepare the statement for inserting multiple electricity measurements: " .. c:errmsg())
+	end
+	for _, measurement in ipairs(aMeasurements) do
+		assert(tonumber(measurement.timeStamp))
+		checkSql(c, stmt:bind_values(
+			measurement.timeStamp,
+			measurement.powerTotal,
+			measurement.powerA,
+			measurement.powerB,
+			measurement.powerC,
+			measurement.energyTotal,
+			measurement.energyA,
+			measurement.energyB,
+			measurement.energyC
+		), "saveMultipleElectricityMeasurements.bind")
+		checkSql(c, stmt:step(), "saveMultipleElectricityMeasurements.step")
+		checkSql(c, stmt:reset(), "saveMultipleElectricityMeasurements.reset")
+	end
+	checkSql(c, stmt:finalize(), "saveMultipleElectricityMeasurements.finalize")
+	checkSql(c, c:exec("COMMIT TRANSACTION"), "saveMultipleElectricityMeasurements.commit")
 end
 
 

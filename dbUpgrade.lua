@@ -86,9 +86,32 @@ local upgrades = {
 			energyB REAL,
 			energyC REAL
 		);
-	]]
+		]]
 	},
 
+	{
+		version = 2,
+		script = [[
+			CREATE TABLE TariffPlanSeasons (
+				startDate TEXT NOT NULL,
+				endDate TEXT NOT NULL,
+				workdayDayType INTEGER NOT NULL,
+				weekendDayType INTEGER NOT NULL
+			);
+
+			CREATE TABLE TariffPlanDayTypeSchedules (
+				dayType INTEGER NOT NULL,
+				startMinute INTEGER NOT NULL,
+				endMinute INTEGER NOT NULL,
+				multiplier REAL NOT NULL
+			);
+
+			CREATE TABLE TariffPlanExceptionDates (
+				date TEXT NOT NULL PRIMARY KEY,
+				dayType INTEGER NOT NULL
+			);
+		]]
+	},
 	-- Future upgrades can be added here
 }
 

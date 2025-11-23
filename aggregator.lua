@@ -1,6 +1,7 @@
 -- aggregator.lua
 
---[[ Implements the data aggregation in background threads
+--[[
+Implements the data aggregation in background threads
 --]]
 
 

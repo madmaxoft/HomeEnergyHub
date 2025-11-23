@@ -447,6 +447,33 @@ end
 
 
 
+--- Returns the tariff plan daytype schedules in an array-table
+function db.getTariffPlanDayTypeSchedules()
+	return db.getArrayFromQuery("SELECT * FROM TariffPlanDayTypeSchedules", {}, "getTariffPlanDayTypeSchedules")
+end
+
+
+
+
+
+--- Returns the tariff plan exceptionDates in an array-table
+function db.getTariffPlanExceptionDates()
+	return db.getArrayFromQuery("SELECT * FROM TariffPlanExceptionDates", {}, "getTariffPlanExceptionDates")
+end
+
+
+
+
+
+--- Returns the tariff plan seasons in an array-table
+function db.getTariffPlanSeasons()
+	return db.getArrayFromQuery("SELECT * FROM TariffPlanSeasons", {}, "getTariffPlanSeasons")
+end
+
+
+
+
+
 function db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
 	assert(type(aTableName) == "string")
 	assert(type(aTimeStamp) == "number")

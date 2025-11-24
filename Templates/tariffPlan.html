@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Home Energy Hub - Tariff Plan</title>
+	<link rel="stylesheet" href="/static/main.css">
+</head>
+<body>
+
+<h1>Home Energy Hub - Tariff Plan</h1>
+
+
+
+
+
+<h2>Seasons</h2>
+<% if not(next(dayTypeSchedules)) then %>
+<p>There are no day types defined. First add a daytype.</p>
+<% else %>
+<table>
+	<tr>
+		<th>Start date</th>
+		<th>End date</th>
+		<th>Workday daytype</th>
+		<th>Weekend daytype</th>
+		<th>Action</th>
+	</tr>
+	<% for _, season in ipairs(seasons) do %>
+	<tr>
+		<td><%= season.startDate %></td>
+		<td><%= season.endDate %></td>
+		<td><%= season.workdayDayType %></td>
+		<td><%= season.weekendDayType %></td>
+		<td>TODO: Edit</td>
+	</tr>
+	<% end %>
+	<tr>
+		<td>TODO: Add</td>
+		<td>TODO: Add</td>
+		<td>TODO: Select</td>
+		<td>TODO: Select</td>
+		<td>TODO: Confirm Add</td>
+	</tr>
+</table>
+<% end %>
+
+
+
+
+
+<h2>Day types / schedules</h2>
+
+<table>
+	<tr>
+		<th>Day type</th>
+		<th>Graph</th>
+		<th>Action</th>
+	</tr>
+	<%
+	-- Collect all dayTypes:
+	local dayTypes = {}
+	local n = 0
+	for dayType, schedule in pairs(dayTypeSchedules) do
+		n = n + 1
+		dayTypes[n] = dayType
+	end
+	table.sort(dayTypes)
+
+	for _, dayType in ipairs(dayTypes) do
+	%>
+	<tr>
+		<td><%= dayType %></td>
+		<td>TODO: Graph</td>
+		<td>TODO: Edit</td>
+	</tr>
+	<% end %>
+	<tr>
+		<td colspan=3>
+		<form method="POST" action="/tariffPlan/addNewDayType" enctype="multipart/form-data">
+		<input type="submit" value="Add new" />
+		</form>
+		</td>
+	</tr>
+</table>
+
+
+
+
+
+<h2>Exceptions</h2>
+
+<% if not(next(dayTypeSchedules)) then %>
+<p>There are no day types defined. First add a daytype.</p>
+<% else %>
+<table>
+	<tr>
+		<th>Date</th>
+		<th>Day type</th>
+		<th>Action</th>
+	</tr>
+	<% for _, ed in ipairs(exceptionDates) do %>
+	<tr>
+		<td><%= ed.date %></td>
+		<td><%= ed.dayType %></td>
+		<td>TODO: Edit</td>
+	</tr>
+	<% end %>
+	<tr>
+		<td colspan=3>TODO: Add</td>
+	</tr>
+</table>
+<% end %>
+
+</body>
+</html>

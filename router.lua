@@ -20,11 +20,13 @@ local router = {}
 -- NOTE: The matcher goes from top to bottom and uses the first substring match,
 -- so the more generic URLs need to go at the bottom
 router.routes = {
-	{ method = "GET",  path = "/static/", handler = require("Handlers.static") },
-	{ method = "GET",  path = "/Static/", handler = require("Handlers.static") },
-	{ method = "GET",  path = "/favicon", handler = require("Handlers.favicon") },
-	{ method = "GET",  path = "/graph?",  handler = require("Handlers.graph") },
-	{ method = "GET",  path = "/",        handler = require("Handlers.home") },
+	{ method = "GET",  path = "/static/",    handler = require("Handlers.static") },
+	{ method = "GET",  path = "/Static/",    handler = require("Handlers.static") },
+	{ method = "GET",  path = "/favicon",    handler = require("Handlers.favicon") },
+	{ method = "GET",  path = "/graph?",     handler = require("Handlers.graph") },
+	{ method = "GET",  path = "/tariffPlan", handler = require("Handlers.tariffPlan").get },
+	{ method = "POST", path = "/tariffPlan", handler = require("Handlers.tariffPlan").post },
+	{ method = "GET",  path = "/",           handler = require("Handlers.home") },
 }
 
 

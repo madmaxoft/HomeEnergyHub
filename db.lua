@@ -88,6 +88,19 @@ end
 
 
 
+--- Adds a new dayType with the all-day 100 % multiplier
+function db.addTariffPlanDayType(aDayType)
+	db.execBoundStatement([[
+		INSERT INTO TariffPlanDayTypeSchedules
+		(dayType, startMinute, endMinute, multiplier)
+		SELECT MAX(dayType) + 1, 0, 1440, 1 FROM TariffPlanDayTypeSchedules
+	]], {}, "addTariffPlanDayType")
+end
+
+
+
+
+
 --- Closes the DB connection
 function db.close()
 	if (conn) then

@@ -591,4 +591,21 @@ end
 
 
 
+function db.saveTariffPlanSeasons(aSeasons)
+	assert(type(aSeasons) == "table")
+	assert(type(aSeasons.n) == "number")
+
+	db.execBoundStatement("DELETE FROM TariffPlanSeasons WHERE TRUE", {}, "saveTariffPlanSeasons.delete")
+	for _, season in ipairs(aSeasons) do
+		db.execBoundStatement([[
+			INSERT INTO TariffPlanSeasons (startDate, endDate, workdayDayType, weekendDayType)
+			VALUES (?, ?, ?, ?)
+		]], {season.startDate, season.endDate, season.workdayDayType, season.weekendDayType}, "saveTariffPlanSeasons.insert")
+	end
+end
+
+
+
+
+
 return db

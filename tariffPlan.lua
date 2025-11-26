@@ -16,6 +16,7 @@ normally be based on workday / weekend. This is used for handling public holiday
 
 
 local db = require("db")
+local utils = require("utils")
 
 
 
@@ -34,74 +35,73 @@ local M = {
 
 
 
---- Loads the plan from the DB into memory
-function M.reloadFromDB()
-	M.seasons = db.getTariffPlanSeasons()
-
-	-- Convert dayTypeSchedules array returned from the DB into a dict-table
-	-- The DB returns multiple rows of {dayType, startMinute, endMinute, multiplier}, we need to collapse
-	-- those into a single array-table:
-	local dtsch = {}
-	local dbDayTypeSchedules = db.getTariffPlanDayTypeSchedules()
-	for _, dt in ipairs(dbDayTypeSchedules) do
-		local sch = dtsch[dt.dayType] or {n = 0}
-		sch.n = sch.n + 1
-		sch[sch.n] = dt
-		dtsch[dt.dayType] = sch
-	end
-	M.dayTypeSchedules = dtsch
-
-	-- Convert exceptionDates array returned from the DB into a dict-table:
-	M.exceptionDates = {}
-	local exceptionDates = db.getTariffPlanExceptionDates()
-	for _, ed in ipairs(exceptionDates) do
-		M.exceptionDates[ed.date] = ed
-	end
+--- Adds a new dayType
+-- The ID is auto-incremented in the DB
+function M.addNewDayType()
+	db.addNewTariffPlanDayType()
+	M.reloadFromDB()
 end
 
 
 
 
 
---- Returns the daytype for the day represented by the specified timestamp
--- Returns nil if no schedule for this day
-function M.getDayType(aTimestamp)
-	-- First check the exceptions:
-	local ymd = os.date("%Y-%m-%d", aTimestamp)
-	local exc = M.exceptionDates[ymd]
-	if (exc) then
-		return exc.dayType
-	end
+function M.addNewSeason(aStartDateYmd, aEndDateYmd, aWorkdayDayType, aWeekendDayType)
+	assert(type(aStartDateYmd) == "string")
+	assert(type(aEndDateYmd) == "string")
+	assert(aStartDateYmd < aEndDateYmd)
+	assert(type(aWorkdayDayType) == "number")
+	assert(type(aWeekendDayType) == "number")
 
-	-- Not an exception, go by the schedule:
-	local weekday = os.date("*t", aTimestamp).wday
-	local isWeekend = (weekday == 1) or (weekday == 7)
-	for _, season in ipairs(M.seasons) do
-		if ((season.startDate <= ymd) and (ymd <= season.endDate)) then
-			if (isWeekend) then
-				return season.weekendDayType
-			else
-				return season.workdayDayType
+	-- First change our representation of the seasons:
+	local numSeasons = M.seasons.n
+	local seasons = {}
+	local n = 0
+	for i = 1, numSeasons do
+		local season = M.seasons[i]
+		if (season.startDate >= aStartDateYmd) then
+			if (season.endDate <= aEndDateYmd) then
+				-- This season is completely contained in the new season, remove it:
+				M.seasons[i] = nil
+			elseif (season.startDate <= aEndDateYmd) then
+				-- This season's start is covered by the new season, adjust it:
+				season.startDate = utils.nextDayYmd(aEndDateYmd)
 			end
 		end
+		if (season.endDate <= aEndDateYmd) then
+			if (season.endDate >= aStartDateYmd) then
+				-- This season's end is covered by the new season, adjust it:
+				season.endDate = utils.prevDayYmd(aStartDateYmd)
+			end
+		end
+		if ((season.startDate < aStartDateYmd) and (season.endDate > aEndDateYmd)) then
+			-- The new season is completely covered in the old season, break the old season in two:
+			n = n + 1
+			seasons[n] = {
+				startDate = season.startDate,
+				endDate = utils.prevDayYmd(aStartDateYmd),
+				workdayDayType = season.workdayDayType,
+				weekendDayType = season.weekendDayType,
+			}
+			season.startDate = utils.nextDayYmd(aEndDateYmd)
+		end
+		if (M.seasons[i]) then
+			n = n + 1
+			seasons[n] = season
+		end
 	end
+	seasons[n + 1] = {
+		startDate = aStartDateYmd,
+		endDate = aEndDateYmd,
+		workdayDayType = aWorkdayDayType,
+		weekendDayType = aWeekendDayType,
+	}
+	seasons.n = n + 1
+	M.seasons = seasons
+	M.sortSeasons()
 
-	-- Not found at all:
-	return nil
-end
-
-
-
-
-
---- Returns the daily schedule table for a given timestamp
--- Returns nil if no schedule for the specified day
-function M.getDailySchedule(aTimestamp)
-	local dayType = M.getDayType(aTimestamp)
-	if not(dayType) then
-		return nil
-	end
-	return M.dayTypeSchedules[dayType]
+	-- Update in the DB:
+	db.saveTariffPlanSeasons(M.seasons)
 end
 
 
@@ -144,19 +144,86 @@ end
 
 
 
---- Calculates cost ratio of this plan vs fixed cost over historical data
--- Returns multiplier like 0.85 for 15% savings
-function M.evaluateSavings(aStartTs, aEndTs, aEnergyData)
-	local schedule = M.generateSchedule(aStartTs, aEndTs)
-	local totalCostPlan, totalCostFixed = 0, 0
+--- Returns the daily schedule table for a given timestamp
+-- Returns nil if no schedule for the specified day
+function M.getDailySchedule(aTimestamp)
+	local dayType = M.getDayType(aTimestamp)
+	if not(dayType) then
+		return nil
+	end
+	return M.dayTypeSchedules[dayType]
+end
 
-	for ts, kWh in pairs(aEnergyData) do
-		local multiplier = schedule[ts] or 1.0
-		totalCostPlan = totalCostPlan + kWh * aFixedCostPerKWh * multiplier
-		totalCostFixed = totalCostFixed + kWh * aFixedCostPerKWh
+
+
+
+
+--- Returns the daytype for the day represented by the specified timestamp
+-- Returns nil if no schedule for this day
+function M.getDayType(aTimestamp)
+	-- First check the exceptions:
+	local ymd = os.date("%Y-%m-%d", aTimestamp)
+	local exc = M.exceptionDates[ymd]
+	if (exc) then
+		return exc.dayType
 	end
 
-	return totalCostPlan / totalCostFixed
+	-- Not an exception, go by the schedule:
+	local weekday = os.date("*t", aTimestamp).wday
+	local isWeekend = (weekday == 1) or (weekday == 7)
+	for _, season in ipairs(M.seasons) do
+		if ((season.startDate <= ymd) and (ymd <= season.endDate)) then
+			if (isWeekend) then
+				return season.weekendDayType
+			else
+				return season.workdayDayType
+			end
+		end
+	end
+
+	-- Not found at all:
+	return nil
+end
+
+
+
+
+
+--- Loads the plan from the DB into memory
+function M.reloadFromDB()
+	M.seasons = db.getTariffPlanSeasons()
+	M.sortSeasons()
+
+	-- Convert dayTypeSchedules array returned from the DB into a dict-table
+	-- The DB returns multiple rows of {dayType, startMinute, endMinute, multiplier}, we need to collapse
+	-- those into a single array-table:
+	local dtsch = {}
+	local dbDayTypeSchedules = db.getTariffPlanDayTypeSchedules()
+	for _, dt in ipairs(dbDayTypeSchedules) do
+		local sch = dtsch[dt.dayType] or {n = 0}
+		sch.n = sch.n + 1
+		sch[sch.n] = dt
+		dtsch[dt.dayType] = sch
+	end
+	M.dayTypeSchedules = dtsch
+
+	-- Convert exceptionDates array returned from the DB into a dict-table:
+	M.exceptionDates = {}
+	local exceptionDates = db.getTariffPlanExceptionDates()
+	for _, ed in ipairs(exceptionDates) do
+		M.exceptionDates[ed.date] = ed
+	end
+end
+
+
+
+
+
+--- Sorts the in-memory seasons representation
+function M.sortSeasons()
+	table.sort(M.seasons, function (aSeason1, aSeason2)
+		return (aSeason1.startDate < aSeason2.startDate)
+	end)
 end
 
 

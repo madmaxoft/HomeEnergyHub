@@ -5,6 +5,24 @@
 	<title>Home Energy Hub - Tariff Plan</title>
 	<link rel="stylesheet" href="/static/main.css">
 </head>
+
+
+
+
+<%
+-- Collect all dayTypes:
+local dayTypes = {}
+local n = 0
+for dayType, schedule in pairs(dayTypeSchedules) do
+	n = n + 1
+	dayTypes[n] = dayType
+end
+table.sort(dayTypes)
+%>
+
+
+
+
 <body>
 
 <h1>Home Energy Hub - Tariff Plan</h1>
@@ -35,11 +53,23 @@
 	</tr>
 	<% end %>
 	<tr>
-		<td>TODO: Add</td>
-		<td>TODO: Add</td>
-		<td>TODO: Select</td>
-		<td>TODO: Select</td>
-		<td>TODO: Confirm Add</td>
+		<form action="/tariffPlan/addNewSeason" method="POST" enctype="multipart/form-data">
+		<td><input name="startDate" type="text" value="" /></td>
+		<td><input name="endDate"   type="text" value="" /></td>
+		<td><select name="workdayDayType">
+			<% for _, dayType in ipairs(dayTypes) do %>
+			<option value="<%= dayType %>"><%= dayType %></option>
+			<% end %>
+		</td>
+		<td><select name="weekendDayType">
+			<% for _, dayType in ipairs(dayTypes) do %>
+			<option value="<%= dayType %>"><%= dayType %></option>
+			<% end %>
+		</td>
+		<td>
+			<input type="submit" value="Add new" />
+		</td>
+		</form>
 	</tr>
 </table>
 <% end %>
@@ -56,18 +86,7 @@
 		<th>Graph</th>
 		<th>Action</th>
 	</tr>
-	<%
-	-- Collect all dayTypes:
-	local dayTypes = {}
-	local n = 0
-	for dayType, schedule in pairs(dayTypeSchedules) do
-		n = n + 1
-		dayTypes[n] = dayType
-	end
-	table.sort(dayTypes)
-
-	for _, dayType in ipairs(dayTypes) do
-	%>
+	<% for _, dayType in ipairs(dayTypes) do %>
 	<tr>
 		<td><%= dayType %></td>
 		<td>TODO: Graph</td>

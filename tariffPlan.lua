@@ -46,6 +46,83 @@ end
 
 
 
+--- Adds a new time slot to the specified DayType's schedule
+-- Modifies existing timeslots so that there's no overlap between them and the new slot
+-- Ignores invalid requests (time out-of-bound)
+function M.addNewDayTypeSlot(aDayType, aStartMinute, aEndMinute, aMultiplier)
+	assert(type(aDayType) == "number")
+	assert(type(aStartMinute) == "number")
+	assert(type(aEndMinute) == "number")
+	assert(type(aMultiplier) == "number")
+
+	-- Check the time interval validity:
+	if (aStartMinute > aEndMinute) then
+		-- Swap the bounds:
+		aStartMinute, aEndMinute = aEndMinute, aStartMinute
+	end
+	if ((aStartMinute > 24 * 60) or (aEndMinute <= 0)) then
+		print(string.format(
+			"[tariffPlan] Requested addition of an out-of-bound timeslot %d - %d into dayType %d",
+			aStartMinute, aEndMinute, aDayType
+		))
+		return
+	end
+
+	-- First change our in-memory representation of the schedule:
+	local numSlots = M.dayTypeSchedules[aDayType].n or #(M.dayTypeSchedules[aDayType])
+	local slots = {}
+	local n = 0
+	for i = 1, numSlots do
+		local slot = M.dayTypeSchedules[aDayType][i]
+		if (slot.startMinute >= aStartMinute) then
+			if (slot.endMinute <= aEndMinute) then
+				-- This slot is completely contained in the new slot, remove it:
+				M.dayTypeSchedules[aDayType][i] = nil
+			elseif (slot.startMinute <= aEndMinute) then
+				-- This slot's start is covered by the new slot, adjust it:
+				slot.startMinute = aEndMinute
+			end
+		end
+		if (slot.endMinute <= aEndMinute) then
+			if (slot.endMinute >= aStartMinute) then
+				-- This slot's end is covered by the new slot, adjust it:
+				slot.endMinute = aStartMinute
+			end
+		end
+		if ((slot.startMinute < aStartMinute) and (slot.endMinute > aEndMinute)) then
+			-- The new slot is completely covered in the old slot, break the old slot in two:
+			n = n + 1
+			slots[n] = {
+				startMinute = slot.startMinute,
+				endMinute = aStartMinute,
+				multiplier = slot.multiplier,
+			}
+			slot.startMinute = aEndMinute
+		end
+		if (M.dayTypeSchedules[aDayType][i]) then
+			n = n + 1
+			slots[n] = slot
+		end
+	end
+	slots[n + 1] = {
+		startMinute = aStartMinute,
+		endMinute = aEndMinute,
+		multiplier = aMultiplier,
+	}
+	slots.n = n + 1
+	M.dayTypeSchedules[aDayType] = slots
+	M.sortDayTypeSchedule(slots)
+
+	-- Update in the DB:
+	db.saveTariffPlanDayTypeSchedule(aDayType, slots)
+end
+
+
+
+
+
+--- Adds a new season
+-- Modifies existing seasons so that there's no overlap between them and the new season
 function M.addNewSeason(aStartDateYmd, aEndDateYmd, aWorkdayDayType, aWeekendDayType)
 	assert(type(aStartDateYmd) == "string")
 	assert(type(aEndDateYmd) == "string")
@@ -223,6 +300,25 @@ end
 function M.sortSeasons()
 	table.sort(M.seasons, function (aSeason1, aSeason2)
 		return (aSeason1.startDate < aSeason2.startDate)
+	end)
+end
+
+
+
+
+
+--- Sorts the in-memory daytype schedule representation
+function M.sortDayTypeSchedule(aDayTypeSchedule)
+	-- Check that all slots are valid:
+	for _, slot in ipairs(aDayTypeSchedule) do
+		assert(type(slot.startMinute) == "number")
+		assert(type(slot.endMinute) == "number")
+		assert(type(slot.multiplier) == "number")
+	end
+
+	-- Sort
+	table.sort(aDayTypeSchedule, function (aSlot1, aSlot2)
+		return (aSlot1.startMinute < aSlot2.startMinute)
 	end)
 end
 

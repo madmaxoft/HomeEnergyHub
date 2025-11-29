@@ -592,10 +592,34 @@ end
 
 
 
+--- Updates the tariff plan schedule for the specified day type
+function db.saveTariffPlanDayTypeSchedule(aDayType, aSchedule)
+	assert(type(aDayType) == "number")
+	assert(type(aSchedule) == "table")
+	assert(type(aSchedule[1]) == "table")
+
+	local c = ensureDb()
+	checkSql(c, c:exec("BEGIN TRANSACTION"), "saveTariffPlanDayTypeSchedule.begin")
+	db.execBoundStatement("DELETE FROM TariffPlanDayTypeSchedules WHERE dayType = ?", {aDayType}, "saveTariffPlanDayTypeSchedule.delete")
+	for _, slot in ipairs(aSchedule) do
+		db.execBoundStatement([[
+			INSERT INTO TariffPlanDayTypeSchedules (dayType, startMinute, endMinute, multiplier)
+			VALUES (?, ?, ?, ?)
+		]], {aDayType, slot.startMinute, slot.endMinute, slot.multiplier}, "saveTariffPlanDayTypeSchedule.insert")
+	end
+	checkSql(c, c:exec("COMMIT TRANSACTION"), "saveTariffPlanDayTypeSchedule.commit")
+end
+
+
+
+
+
 function db.saveTariffPlanSeasons(aSeasons)
 	assert(type(aSeasons) == "table")
 	assert(type(aSeasons.n) == "number")
 
+	local c = ensureDb()
+	checkSql(c, c:exec("BEGIN TRANSACTION"), "saveTariffPlanSeasons.begin")
 	db.execBoundStatement("DELETE FROM TariffPlanSeasons WHERE TRUE", {}, "saveTariffPlanSeasons.delete")
 	for _, season in ipairs(aSeasons) do
 		db.execBoundStatement([[
@@ -603,6 +627,7 @@ function db.saveTariffPlanSeasons(aSeasons)
 			VALUES (?, ?, ?, ?)
 		]], {season.startDate, season.endDate, season.workdayDayType, season.weekendDayType}, "saveTariffPlanSeasons.insert")
 	end
+	checkSql(c, c:exec("COMMIT TRANSACTION"), "saveTariffPlanSeasons.commit")
 end
 
 

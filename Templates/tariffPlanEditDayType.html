@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Home Energy Hub - Tariff Plan - Edit DayType</title>
+	<link rel="stylesheet" href="/static/main.css">
+</head>
+<body>
+
+<h1>Home Energy Hub - Tariff Plan - Edit DayType <%= dayType %></h1>
+
+<%
+--- Returns a string representing the specified amount of minutes, as either "MM" or "HHH:MM"
+local function formatMinutes(aMinutes)
+	assert(type(aMinutes) == "number")
+
+	if (aMinutes < 60) then
+		return tostring(aMinutes)
+	end
+	return string.format("%d:%02d", math.floor(aMinutes / 60), aMinutes % 60)
+end
+%>
+
+<table>
+	<tr>
+		<th>Start time</th>
+		<th>End time</th>
+		<th>Multiplier</th>
+		<th>Action</th>
+	</tr>
+	<% for _, slot in ipairs(dayTypeSchedule) do %>
+	<tr>
+		<td><%= formatMinutes(slot.startMinute) %></td>
+		<td><%= formatMinutes(slot.endMinute) %></td>
+		<td><%= slot.multiplier %></td>
+	</tr>
+	<% end %>
+	<tr>
+		<form action="/tariffPlan/editDayType/addNewSlot" method="POST" enctype="multipart/form-data">
+		<input name="dayType" type="hidden" value="<%= dayType %>" />
+		<td><input name="startMinute" type="text" value="" /></td>
+		<td><input name="endMinute"   type="text" value="" /></td>
+		<td><input name="multiplier"  type="text" value="1" /></td>
+		<td>
+			<input type="submit" value="Add new" />
+		</td>
+		</form>
+	</tr>
+</table>
+TODO: graph
+</body>
+</html>

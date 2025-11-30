@@ -20,13 +20,22 @@ local router = {}
 -- NOTE: The matcher goes from top to bottom and uses the first substring match,
 -- so the more generic URLs need to go at the bottom
 router.routes = {
-	{ method = "GET",  path = "/static/",    handler = require("Handlers.static") },
-	{ method = "GET",  path = "/Static/",    handler = require("Handlers.static") },
-	{ method = "GET",  path = "/favicon",    handler = require("Handlers.favicon") },
-	{ method = "GET",  path = "/graph?",     handler = require("Handlers.graph") },
-	{ method = "GET",  path = "/tariffPlan", handler = require("Handlers.tariffPlan").get },
-	{ method = "POST", path = "/tariffPlan", handler = require("Handlers.tariffPlan").post },
-	{ method = "GET",  path = "/",           handler = require("Handlers.home") },
+	GET =
+	{
+		{ path = "/static/",                            handler = require("Handlers.static") },
+		{ path = "/Static/",                            handler = require("Handlers.static") },
+		{ path = "/favicon",                            handler = require("Handlers.favicon") },
+		{ path = "/graph?",                             handler = require("Handlers.graph") },
+		{ path = "/tariffPlan/editDayType/",            handler = require("Handlers.tariffPlanUI").getEditDayType },
+		{ path = "/tariffPlan",                         handler = require("Handlers.tariffPlanUI").getTariffPlan },
+		{ path = "/",                                   handler = require("Handlers.home") },
+	},
+	POST =
+	{
+		{ path = "/tariffPlan/addNewDayType",           handler = require("Handlers.tariffPlanUI").postAddNewDayType },
+		{ path = "/tariffPlan/addNewSeason",            handler = require("Handlers.tariffPlanUI").postAddNewSeason },
+		{ path = "/tariffPlan/editDayType/addNewSlot",  handler = require("Handlers.tariffPlanUI").postAddNewDayTypeSlot },
+	},
 }
 
 
@@ -39,11 +48,8 @@ function router.match(aMethod, aPath)
 	assert(type(aMethod) == "string")
 	assert(type(aPath) == "string")
 
-	for _, route in ipairs(router.routes) do
-		if (
-			(route.method == aMethod) and
-			(route.path == string.sub(aPath, 1, #route.path))
-		) then
+	for _, route in ipairs(router.routes[aMethod] or {}) do
+		if (route.path == string.sub(aPath, 1, #route.path)) then
 			return route.handler
 		end
 	end

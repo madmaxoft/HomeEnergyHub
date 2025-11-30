@@ -35,6 +35,28 @@ local gMaxMonthDay =
 
 
 
+--- Returns true if the specified date string is a valid YYYY-MM-DD date representation
+function M.checkYmdDate(aDateStr)
+	assert(type(aDateStr) == "string")
+
+	local y, m, d = string.match(aDateStr, "(%d+)%-(%d+)%-(%d+)")
+	if not(y and m and d) then
+		return nil, "Cannot parse the YMD string"
+	end
+	y, m, d = tonumber(y), tonumber(m), tonumber(d)
+	if not(y and m and d) then
+		return nil, "Cannot convert YMD to numbers"
+	end
+	if not(M.isValidYmd(y, m, d)) then
+		return nil, "YMD out of range"
+	end
+	return true
+end
+
+
+
+
+
 --- Returns whether the specified year is a leap year
 function M.isLeapYear(aYear)
 	if ((aYear % 4) ~= 0) then
@@ -62,28 +84,6 @@ function M.isValidYmd(aYear, aMonth, aDay)
 		((aMonth == 2) and (aDay == 29) and not(M.isLeapYear(aYear)))
 	) then
 		return false
-	end
-	return true
-end
-
-
-
-
-
---- Returns true if the specified date string is a valid YYYY-MM-DD date representation
-function M.checkYmdDate(aDateStr)
-	assert(type(aDateStr) == "string")
-
-	local y, m, d = string.match(aDateStr, "(%d+)%-(%d+)%-(%d+)")
-	if not(y and m and d) then
-		return nil, "Cannot parse the YMD string"
-	end
-	y, m, d = tonumber(y), tonumber(m), tonumber(d)
-	if not(y and m and d) then
-		return nil, "Cannot convert YMD to numbers"
-	end
-	if not(M.isValidYmd(y, m, d)) then
-		return nil, "YMD out of range"
 	end
 	return true
 end
@@ -121,6 +121,37 @@ function M.nextDayYmd(aDateStr)
 		return string.format("%d-%02d-01", y, m + 1)
 	end
 	return string.format("%d-%02d-%02d", y, m, d + 1)
+end
+
+
+
+
+
+--- Parses a "HHH:MM", "HHHMM" or "MM" string into a number of minutes
+-- NOTE: "100" means "1:00", "330" means "3:30" in this parser, for user input convenience
+-- Returns nil and error message on failure
+function M.parseMinutes(aMinutesStr)
+	if not(aMinutesStr) then
+		return nil, "Invalid minutes input"
+	end
+	assert(type(aMinutesStr) == "string")
+	if (aMinutesStr:len() > 2) then
+		local hoursStr, minutesStr = aMinutesStr:match("(%d+):?(%d%d)")
+		if not(hoursStr and minutesStr) then
+			return nil, "Cannot parse hours and minutes"
+		end
+		local hours = tonumber(hoursStr)
+		local minutes = tonumber(minutesStr)
+		if not(hours and minutes) then
+			return nil, "Cannot parse hours and minutes into numbers"
+		end
+		return hours * 60 + minutes
+	end
+	local minutes = tonumber(aMinutesStr)
+	if not(minutes) then
+		return nil, "Cannot parse number of minutes"
+	end
+	return minutes
 end
 
 

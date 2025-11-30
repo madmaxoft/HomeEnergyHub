@@ -89,7 +89,7 @@ table.sort(dayTypes)
 	<% for _, dayType in ipairs(dayTypes) do %>
 	<tr>
 		<td><%= dayType %></td>
-		<td>TODO: Graph</td>
+		<td><img src="/tariffPlan/dayTypeGraph?dayType=<%= dayType %>&width=720&height=50" width="720" height="50"/></td>
 		<td><a href="/tariffPlan/editDayType/<%= dayType %>">Edit</a></td>
 	</tr>
 	<% end %>

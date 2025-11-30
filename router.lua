@@ -27,6 +27,7 @@ router.routes = {
 		{ path = "/favicon",                            handler = require("Handlers.favicon") },
 		{ path = "/graph?",                             handler = require("Handlers.graph") },
 		{ path = "/tariffPlan/editDayType/",            handler = require("Handlers.tariffPlanUI").getEditDayType },
+		{ path = "/tariffPlan/dayTypeGraph?",           handler = require("Handlers.tariffPlanUI").getDayTypeGraph },
 		{ path = "/tariffPlan",                         handler = require("Handlers.tariffPlanUI").getTariffPlan },
 		{ path = "/",                                   handler = require("Handlers.home") },
 	},

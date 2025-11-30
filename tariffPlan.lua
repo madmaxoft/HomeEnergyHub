@@ -37,9 +37,11 @@ local M = {
 
 --- Adds a new dayType
 -- The ID is auto-incremented in the DB
+-- Returns the new DayType
 function M.addNewDayType()
-	db.addNewTariffPlanDayType()
+	local res = db.addNewTariffPlanDayType()
 	M.reloadFromDB()
+	return res
 end
 
 

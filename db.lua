@@ -89,6 +89,7 @@ end
 
 
 --- Adds a new dayType with the all-day 100 % multiplier
+-- Returns the new dayType
 function db.addNewTariffPlanDayType(aDayType)
 	db.execBoundStatement([[
 		INSERT INTO TariffPlanDayTypeSchedules
@@ -96,6 +97,8 @@ function db.addNewTariffPlanDayType(aDayType)
 		SELECT COALESCE(MAX(dayType), -1) + 1, 0, 1440, 1
 		FROM TariffPlanDayTypeSchedules;
 	]], {}, "addTariffPlanDayType")
+	local res = db.getArrayFromQuery("SELECT MAX(dayType) as m FROM TariffPlanDayTypeSchedules", {}, "addNewTariffPlanDayType.getMax")
+	return res[1].m
 end
 
 

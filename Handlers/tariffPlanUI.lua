@@ -173,7 +173,10 @@ return {
 
 
 	postAddNewDayType = function(aClient, aPath, aRequestHeaders)
-		tariffPlan.addNewDayType()
+		local dayType = tariffPlan.addNewDayType()
+		if (dayType) then
+			return httpResponse.sendRedirect(aClient, "/tariffPlan/editDayType/" .. dayType)
+		end
 		return httpResponse.sendRedirect(aClient, "/tariffPlan")
 	end,
 

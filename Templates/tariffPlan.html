@@ -17,7 +17,20 @@ for dayType, schedule in pairs(dayTypeSchedules) do
 	n = n + 1
 	dayTypes[n] = dayType
 end
+dayTypes.n = n
 table.sort(dayTypes)
+
+-- Collect all exceptionDates into an array (for sorting):
+local exceptionDatesArr = {}
+n = 0
+for exceptionDate, ed in pairs(exceptionDates) do
+	n = n + 1
+	exceptionDatesArr[n] = ed
+end
+exceptionDatesArr.n = n
+table.sort(exceptionDatesArr, function (aED1, aED2)
+	return (aED1.date < aED2.date)
+end)
 %>
 
 
@@ -49,7 +62,6 @@ table.sort(dayTypes)
 		<td><%= season.endDate %></td>
 		<td><%= season.workdayDayType %></td>
 		<td><%= season.weekendDayType %></td>
-		<td>TODO: Edit</td>
 	</tr>
 	<% end %>
 	<tr>
@@ -117,15 +129,23 @@ table.sort(dayTypes)
 		<th>Day type</th>
 		<th>Action</th>
 	</tr>
-	<% for _, ed in ipairs(exceptionDates) do %>
+	<% for _, ed in ipairs(exceptionDatesArr) do %>
 	<tr>
 		<td><%= ed.date %></td>
 		<td><%= ed.dayType %></td>
-		<td>TODO: Edit</td>
+		<td>TODO: Remove</td>
 	</tr>
 	<% end %>
 	<tr>
-		<td colspan=3>TODO: Add</td>
+		<form action="/tariffPlan/addNewExceptionDate" method="POST" enctype="multipart/form-data">
+		<td><input name="exceptionDate" type="text" value="" /></td>
+		<td><select name="dayType">
+			<% for _, dayType in ipairs(dayTypes) do %>
+			<option value="<%= dayType %>"><%= dayType %></option>
+			<% end %>
+		</td>
+		<td><input type="submit" value="Add new" /></td>
+		</form>
 	</tr>
 </table>
 <% end %>

@@ -105,6 +105,23 @@ end
 
 
 
+--- Adds a new TariffPlan ExceptionDate, or overwrites an existing one
+function db.addNewTariffPlanExceptionDate(aExceptionDate, aDayType)
+	assert(type(aExceptionDate) == "string")
+	assert(type(aDayType) == "number")
+
+	db.execBoundStatement([[
+		INSERT INTO TariffPlanExceptionDates
+		(date, dayType)
+		VALUES (?, ?)
+		ON CONFLICT DO UPDATE SET dayType = excluded.dayType
+	]], {aExceptionDate, aDayType}, "addNewTariffPlanExceptionDate")
+end
+
+
+
+
+
 --- Closes the DB connection
 function db.close()
 	if (conn) then

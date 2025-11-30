@@ -123,6 +123,21 @@ end
 
 
 
+--- Adds a new exceptionDate, or overwrites an existing one
+function M.addNewExceptionDate(aExceptionDate, aDayType)
+	assert(type(aExceptionDate) == "string")
+	assert(type(aDayType) == "number")
+	assert(utils.checkYmdDate(aExceptionDate))  -- is date valid?
+	assert(M.dayTypeSchedules[aDayType])        -- is daytype valid?
+
+	db.addNewTariffPlanExceptionDate(aExceptionDate, aDayType)
+	M.reloadFromDB()
+end
+
+
+
+
+
 --- Adds a new season
 -- Modifies existing seasons so that there's no overlap between them and the new season
 function M.addNewSeason(aStartDateYmd, aEndDateYmd, aWorkdayDayType, aWeekendDayType)

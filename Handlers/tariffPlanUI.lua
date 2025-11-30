@@ -172,6 +172,33 @@ return {
 
 
 
+	postAddNewExceptionDate = function(aClient, aPath, aRequestHeaders)
+		-- Parse the inputs:
+		local body = httpRequest.readBody(aClient, aRequestHeaders)
+		local m = multipart(body, aRequestHeaders["content-type"])
+		local exceptionDate = (m:get("exceptionDate") or {}).value
+		local dayType = tonumber((m:get("dayType") or {}).value)
+		if not(exceptionDate and dayType) then
+			return httpResponse.sendError(aClient, 400, "Missing required fields")
+		end
+
+		-- Check the validity:
+		if not(utils.checkYmdDate(exceptionDate)) then
+			return httpResponse.sendError(aClient, 400, "Invalid exception date")
+		end
+		if not(tariffPlan.dayTypeSchedules[dayType]) then
+			return httpResponse.sendError(aClient, 400, "No such DayType")
+		end
+
+		-- Add the exception:
+		tariffPlan.addNewExceptionDate(exceptionDate, dayType)
+		return httpResponse.sendRedirect(aClient, "/tariffPlan")
+	end,
+
+
+
+
+
 	postAddNewDayType = function(aClient, aPath, aRequestHeaders)
 		local dayType = tariffPlan.addNewDayType()
 		if (dayType) then

@@ -112,7 +112,7 @@ function db.addNewTariffPlanExceptionDate(aExceptionDate, aDayType)
 
 	db.execBoundStatement([[
 		INSERT INTO TariffPlanExceptionDates
-		(date, dayType)
+		(exceptionDate, dayType)
 		VALUES (?, ?)
 		ON CONFLICT DO UPDATE SET dayType = excluded.dayType
 	]], {aExceptionDate, aDayType}, "addNewTariffPlanExceptionDate")

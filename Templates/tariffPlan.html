@@ -29,7 +29,7 @@ for exceptionDate, ed in pairs(exceptionDates) do
 end
 exceptionDatesArr.n = n
 table.sort(exceptionDatesArr, function (aED1, aED2)
-	return (aED1.date < aED2.date)
+	return (aED1.exceptionDate < aED2.exceptionDate)
 end)
 %>
 
@@ -131,7 +131,7 @@ end)
 	</tr>
 	<% for _, ed in ipairs(exceptionDatesArr) do %>
 	<tr>
-		<td><%= ed.date %></td>
+		<td><%= ed.exceptionDate %></td>
 		<td><%= ed.dayType %></td>
 		<td>TODO: Remove</td>
 	</tr>

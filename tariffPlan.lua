@@ -305,7 +305,7 @@ function M.reloadFromDB()
 	M.exceptionDates = {}
 	local exceptionDates = db.getTariffPlanExceptionDates()
 	for _, ed in ipairs(exceptionDates) do
-		M.exceptionDates[ed.date] = ed
+		M.exceptionDates[ed.exceptionDate] = ed
 	end
 end
 

@@ -112,6 +112,14 @@ local upgrades = {
 			);
 		]]
 	},
+
+	{
+		version = 3,
+		script = [[
+			ALTER TABLE TariffPlanExceptionDates
+			RENAME COLUMN date TO exceptionDate;
+		]]
+	},
 	-- Future upgrades can be added here
 }
 

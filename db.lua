@@ -548,6 +548,20 @@ end
 
 
 
+--- Removes the specified TariffPlan ExceptionDate
+function db.removeTariffPlanExceptionDate(aExceptionDate)
+	assert(type(aExceptionDate) == "string")
+
+	db.execBoundStatement([[
+		DELETE FROM TariffPlanExceptionDates
+		WHERE exceptionDate = ?
+	]], {aExceptionDate}, "removeTariffPlanExceptionDate")
+end
+
+
+
+
+
 --- Saves multiple 5-second buckets of electricity measurement (rows in ElectricityConsumption table)
 -- Each aMeasurements[i] is a dict-able of DB column name -> value, with some columns possibly missing, and with a timeStamp
 function db.saveMultipleElectricityMeasurements(aMeasurements)

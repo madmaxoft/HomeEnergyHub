@@ -280,4 +280,30 @@ return {
 		tariffPlan.addNewSeason(startDate, endDate, workdayDayType, weekendDayType)
 		return httpResponse.sendRedirect(aClient, "/tariffPlan")
 	end,
+
+
+
+
+
+	postRemoveExceptionDate = function(aClient, aPath, aRequestHeaders)
+		-- Parse the inputs:
+		local body = httpRequest.readBody(aClient, aRequestHeaders)
+		local m = multipart(body, aRequestHeaders["content-type"])
+		local exceptionDate = (m:get("exceptionDate") or {}).value
+
+		-- Check validity:
+		if not(exceptionDate) then
+			return httpResponse.sendError(aClient, 400, "Missing required fields")
+		end
+		if not(utils.checkYmdDate(exceptionDate)) then
+			return httpResponse.sendError(aClient, 400, "Invalid exceptionDate")
+		end
+		if not(tariffPlan.exceptionDates[exceptionDate]) then
+			return httpResponse.sendError(aClient, 400, "Not an exception date")
+		end
+
+		-- Remove:
+		tariffPlan.removeExceptionDate(exceptionDate)
+		return httpResponse.sendRedirect(aClient, "/tariffPlan")
+	end,
 }

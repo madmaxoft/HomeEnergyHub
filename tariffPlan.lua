@@ -313,6 +313,18 @@ end
 
 
 
+--- Removes the specified exceptionDate
+function M.removeExceptionDate(aExceptionDate)
+	assert(type(aExceptionDate) == "string")
+
+	db.removeTariffPlanExceptionDate(aExceptionDate)
+	M.exceptionDates[aExceptionDate] = nil
+end
+
+
+
+
+
 --- Sorts the in-memory seasons representation
 function M.sortSeasons()
 	table.sort(M.seasons, function (aSeason1, aSeason2)

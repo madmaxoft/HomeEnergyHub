@@ -133,7 +133,12 @@ end)
 	<tr>
 		<td><%= ed.exceptionDate %></td>
 		<td><%= ed.dayType %></td>
-		<td>TODO: Remove</td>
+		<td>
+			<form action="/tariffPlan/removeExceptionDate" method="POST" encType="multipart/form-data">
+			<input name="exceptionDate" value="<%= ed.exceptionDate %>" type="hidden" />
+			<input type="submit" value="Remove" />
+			</form>
+		</td>
 	</tr>
 	<% end %>
 	<tr>

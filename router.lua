@@ -37,6 +37,7 @@ router.routes = {
 		{ path = "/tariffPlan/addNewExceptionDate",     handler = require("Handlers.tariffPlanUI").postAddNewExceptionDate },
 		{ path = "/tariffPlan/addNewSeason",            handler = require("Handlers.tariffPlanUI").postAddNewSeason },
 		{ path = "/tariffPlan/editDayType/addNewSlot",  handler = require("Handlers.tariffPlanUI").postAddNewDayTypeSlot },
+		{ path = "/tariffPlan/removeExceptionDate",     handler = require("Handlers.tariffPlanUI").postRemoveExceptionDate },
 	},
 }
 

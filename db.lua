@@ -548,6 +548,25 @@ end
 
 
 
+--- Loads the energy usage in 15-minute intervals for the specified range
+-- The interval starts at aFromTimestamp - aNumDaysBack*days and ends with the day-end at aFromTimestamp
+function db.load15MinEnergyUsage(aFromTimestamp, aNumDaysBack)
+	assert(type(aFromTimestamp) == "number")
+	assert(type(aNumDaysBack) == "number")
+
+	local minTs = aFromTimestamp - aNumDaysBack * 24 * 60 * 60
+	return db.getArrayFromQuery([[
+		SELECT timeStamp, energyTotal
+		FROM ElectricityConsumption
+		WHERE (((timeStamp % 900) = 0) AND (timeStamp >= ?) AND (timeStamp <= ?) AND (energyTotal IS NOT NULL))
+		ORDER BY timeStamp;
+	]], { minTs, aFromTimestamp + 24 * 60 * 60 }, "load15MinEnergyUsage")
+end
+
+
+
+
+
 --- Removes the specified TariffPlan ExceptionDate
 function db.removeTariffPlanExceptionDate(aExceptionDate)
 	assert(type(aExceptionDate) == "string")

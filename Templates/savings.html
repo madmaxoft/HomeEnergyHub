@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Home Energy Hub - Savings</title>
+	<link rel="stylesheet" href="/static/main.css">
+</head>
+
+
+
+<%
+--- Returns the savings for the specified day, as two values, the percentage and the td class name
+-- Returns empty strings if the calculation fails.
+-- aDay is the day description table with energyUsed and tariffPlanEnergyUsed members
+local function savings(aDay)
+	assert(type(aDay) == "table")
+	if not(aDay.energyUsed and aDay.tariffPlanEnergyUsed) then
+		return "", ""
+	end
+	local percentage = 100 * (aDay.tariffPlanEnergyUsed - aDay.energyUsed) / aDay.energyUsed
+	if (percentage < 0) then
+		class = "energySaved"
+	else
+		class = "energyExpended"
+	end
+	return string.format("%.1f %%", percentage), class
+end
+
+--- Returns the string representing the specified energy value
+-- Returns empty string for invalid values
+local function formatEnergy(aEnergy)
+	if not(aEnergy) then
+		return ""
+	end
+	return string.format("%.2f", aEnergy)
+end
+%>
+
+
+<body>
+<h1>Home Energy Hub - Savings</h1>
+
+<p>
+<a href="/">Home</a> | <a href="/tariffPlan">Tariff plan</a>
+</p>
+
+<table>
+<tr>
+	<th>Day</th>
+	<th>Start-day status (kWh)</th>
+	<th>End-day status (kWh)</th>
+	<th>Energy used (kWh)</th>
+	<th>Adjusted by tariff plan (kWh)</th>
+	<th>Savings</th>
+</tr>
+<%
+local totalEnergyUsed = 0
+local totalTariffPlanEnergyUsed = 0
+for _, day in ipairs(dailyUsage) do
+	local savingsPercentage, savingsClass = savings(day)
+%>
+<tr>
+	<td><%= day.dayYmd %></td>
+	<td class="energy"><%= formatEnergy(day.energyStatusAtStart) %></td>
+	<td class="energy"><%= formatEnergy(day.energyStatusAtEnd) %></td>
+	<td class="energy"><%= formatEnergy(day.energyUsed) %></td>
+	<td class="energy<%= day.hasNoSchedule and " hasNoSchedule" or "" %>"><%= formatEnergy(day.tariffPlanEnergyUsed) %></td>
+	<td class="<%= savingsClass %>"><%= savingsPercentage %></td>
+</tr>
+<%
+	totalEnergyUsed = totalEnergyUsed + day.energyUsed
+	totalTariffPlanEnergyUsed = totalTariffPlanEnergyUsed + day.tariffPlanEnergyUsed
+end
+local savingsPercentage, savingsClass = savings({energyUsed = totalEnergyUsed, tariffPlanEnergyUsed = totalTariffPlanEnergyUsed})
+%>
+<tr>
+	<td>Total</td>
+	<td class="energy"></td>
+	<td class="energy"></td>
+	<td class="energy"><%= formatEnergy(totalEnergyUsed) %></td>
+	<td class="energy"><%= formatEnergy(totalTariffPlanEnergyUsed) %></td>
+	<td class="<%= savingsClass %>"><%= savingsPercentage %></td>
+</tr>
+</table>
+</body>

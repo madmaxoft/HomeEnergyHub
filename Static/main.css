@@ -33,3 +33,19 @@ img.graph {
 .energy, .power {
 	text-align: right;
 }
+
+
+
+
+/* Styles for displaying energy savings for a tariff plan: */
+.energySaved {
+	background-color: #eeffee;
+	text-align: right;
+}
+.energyExpended {
+	background-color: #ffeeee;
+	text-align: right;
+}
+.hasNoSchedule {
+	background-color: #ffffee;
+}

@@ -10,6 +10,7 @@
 # Abort on error:
 set -e
 
+sudo luarocks install luafilesystem
 sudo luarocks install copas
 sudo luarocks install luasocket
 sudo luarocks install lsqlite3

@@ -141,9 +141,9 @@ end
 
 --- Start everything:
 startSensors()
-aggregator.start(          60, "ElectricityConsumptionAggregate1min")
-aggregator.start(     15 * 60, "ElectricityConsumptionAggregate15min")
-aggregator.start(24 * 60 * 60, "ElectricityConsumptionAggregateDay")
+-- aggregator.start(          60, "ElectricityConsumptionAggregate1min")
+-- aggregator.start(     15 * 60, "ElectricityConsumptionAggregate15min")
+-- aggregator.start(24 * 60 * 60, "ElectricityConsumptionAggregateDay")
 startServer()
 
 copas.loop()

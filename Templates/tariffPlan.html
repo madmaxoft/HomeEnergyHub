@@ -29,7 +29,7 @@ for exceptionDate, ed in pairs(exceptionDates) do
 end
 exceptionDatesArr.n = n
 table.sort(exceptionDatesArr, function (aED1, aED2)
-	return (aED1.exceptionDate < aED2.exceptionDate)
+	return (aED1.exceptionDateYmd < aED2.exceptionDateYmd)
 end)
 %>
 
@@ -40,8 +40,11 @@ end)
 
 <h1>Home Energy Hub - Tariff Plan</h1>
 
-<p><a href="/">Home</a></p>
-
+<p>
+	<a href="/">Home</a> |
+	<a href="/tariffPlan/export">Export</a> |
+	<a href="/tariffPlan/import">Import</a>
+</p>
 
 
 <h2>Seasons</h2>
@@ -58,8 +61,8 @@ end)
 	</tr>
 	<% for _, season in ipairs(seasons) do %>
 	<tr>
-		<td><%= season.startDate %></td>
-		<td><%= season.endDate %></td>
+		<td><%= season.startDateYmd %></td>
+		<td><%= season.endDateYmd %></td>
 		<td><%= season.workdayDayType %></td>
 		<td><%= season.weekendDayType %></td>
 	</tr>
@@ -131,7 +134,7 @@ end)
 	</tr>
 	<% for _, ed in ipairs(exceptionDatesArr) do %>
 	<tr>
-		<td><%= ed.exceptionDate %></td>
+		<td><%= ed.exceptionDateYmd %></td>
 		<td><%= ed.dayType %></td>
 		<td>
 			<form action="/tariffPlan/removeExceptionDate" method="POST" encType="multipart/form-data">

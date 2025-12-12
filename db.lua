@@ -106,13 +106,13 @@ end
 
 
 --- Adds a new TariffPlan ExceptionDate, or overwrites an existing one
-function db.addNewTariffPlanExceptionDate(aExceptionDate, aDayType)
-	assert(type(aExceptionDate) == "string")
+function db.addNewTariffPlanExceptionDate(aExceptionDateYmd, aDayType)
+	assert(type(aExceptionDateYmd) == "string")
 	assert(type(aDayType) == "number")
 
 	db.execBoundStatement([[
 		INSERT INTO TariffPlanExceptionDates
-		(exceptionDate, dayType)
+		(exceptionDateYmd, dayType)
 		VALUES (?, ?)
 		ON CONFLICT DO UPDATE SET dayType = excluded.dayType
 	]], {aExceptionDate, aDayType}, "addNewTariffPlanExceptionDate")
@@ -568,13 +568,106 @@ end
 
 
 --- Removes the specified TariffPlan ExceptionDate
-function db.removeTariffPlanExceptionDate(aExceptionDate)
-	assert(type(aExceptionDate) == "string")
+function db.removeTariffPlanExceptionDate(aExceptionDateYmd)
+	assert(type(aExceptionDateYmd) == "string")
 
 	db.execBoundStatement([[
 		DELETE FROM TariffPlanExceptionDates
-		WHERE exceptionDate = ?
+		WHERE exceptionDateYmd = ?
 	]], {aExceptionDate}, "removeTariffPlanExceptionDate")
+end
+
+
+
+
+
+--- Replaces the TariffPlan schedules in the DB with the specified array-table
+function db.replaceTariffPlanSeasons(aSeasons)
+	assert(type(aSeasons) == "table")
+
+	db.execBoundStatement("DELETE FROM TariffPlanSeasons WHERE true", {}, "replaceTariffPlanSeasons.delAll")
+	local c = ensureDb()
+	local stmt = c:prepare([[
+		INSERT INTO TariffPlanSeasons
+		(startDateYmd, endDateYmd, workdayDayType, weekendDayType)
+		VALUES (?, ?, ?, ?)
+	]])
+	if not(stmt) then
+		error("Failed to prepare statement (replaceTariffPlanSeasons): " .. c:errmsg())
+	end
+	for _, season in ipairs(aSeasons) do
+		checkSql(c, stmt:bind_values(
+			season.startDateYmd,
+			season.endDateYmd,
+			season.workdayDayType,
+			season.weekendDayType
+		), "replaceTariffPlanSeasons.bind")
+		checkSql(c, stmt:step(), "replaceTariffPlanSeasons.step")
+		checkSql(c, stmt:reset(), "replaceTariffPlanSeasons.reset")
+	end
+	checkSql(c, stmt:finalize(), "replaceTariffPlanSeasons.finalize")
+end
+
+
+
+
+
+--- Replaces the TariffPlan dayTypes in the DB with the specified dict-table
+function db.replaceTariffPlanDayTypeSchedules(aDayTypeSchedules)
+	assert(type(aDayTypeSchedules) == "table")
+
+	db.execBoundStatement("DELETE FROM TariffPlanDayTypeSchedules WHERE true", {}, "replaceTariffPlanDayTypeSchedules.delAll")
+	local c = ensureDb()
+	local stmt = c:prepare([[
+		INSERT INTO TariffPlanDayTypeSchedules
+		(dayType, startMinute, endMinute, multiplier)
+		VALUES (?, ?, ?, ?)
+	]])
+	if not(stmt) then
+		error("Failed to prepare statement (replaceTariffPlanDayTypeSchedules): " .. c:errmsg())
+	end
+	for dayType, slots in pairs(aDayTypeSchedules) do
+		for _, slot in ipairs(slots) do
+			checkSql(c, stmt:bind_values(
+				dayType,
+				slot.startMinute,
+				slot.endMinute,
+				slot.multiplier
+			), "replaceTariffPlanDayTypeSchedules.bind")
+			checkSql(c, stmt:step(), "replaceTariffPlanDayTypeSchedules.step")
+			checkSql(c, stmt:reset(), "replaceTariffPlanDayTypeSchedules.reset")
+		end
+	end
+	checkSql(c, stmt:finalize(), "replaceTariffPlanDayTypeSchedules.finalize")
+end
+
+
+
+
+
+--- Replaces the TariffPlan exceptionDates in the DB with the specified dict-table
+function db.replaceTariffPlanExceptionDates(aExceptionDates)
+	assert(type(aExceptionDates) == "table")
+
+	db.execBoundStatement("DELETE FROM TariffPlanExceptionDates WHERE true", {}, "replaceTariffPlanExceptionDates.delAll")
+	local c = ensureDb()
+	local stmt = c:prepare([[
+		INSERT INTO TariffPlanExceptionDates
+		(exceptionDateYmd, dayType)
+		VALUES (?, ?)
+	]])
+	if not(stmt) then
+		error("Failed to prepare statement (replaceTariffPlanExceptionDates): " .. c:errmsg())
+	end
+	for excDateYmd, def in pairs(aExceptionDates) do
+		checkSql(c, stmt:bind_values(
+			excDateYmd,
+			def.dayType
+		), "replaceTariffPlanExceptionDates.bind")
+		checkSql(c, stmt:step(), "replaceTariffPlanExceptionDates.step")
+		checkSql(c, stmt:reset(), "replaceTariffPlanExceptionDates.reset")
+	end
+	checkSql(c, stmt:finalize(), "replaceTariffPlanExceptionDates.finalize")
 end
 
 
@@ -676,9 +769,9 @@ function db.saveTariffPlanSeasons(aSeasons)
 	db.execBoundStatement("DELETE FROM TariffPlanSeasons WHERE TRUE", {}, "saveTariffPlanSeasons.delete")
 	for _, season in ipairs(aSeasons) do
 		db.execBoundStatement([[
-			INSERT INTO TariffPlanSeasons (startDate, endDate, workdayDayType, weekendDayType)
+			INSERT INTO TariffPlanSeasons (startDateYmd, endDateYmd, workdayDayType, weekendDayType)
 			VALUES (?, ?, ?, ?)
-		]], {season.startDate, season.endDate, season.workdayDayType, season.weekendDayType}, "saveTariffPlanSeasons.insert")
+		]], {season.startDateYmd, season.endDateYmd, season.workdayDayType, season.weekendDayType}, "saveTariffPlanSeasons.insert")
 	end
 	checkSql(c, c:exec("COMMIT TRANSACTION"), "saveTariffPlanSeasons.commit")
 end

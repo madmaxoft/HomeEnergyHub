@@ -158,6 +158,28 @@ return {
 
 
 
+	--- Exports the entire tariffPlan data into a single source file that can then be imported using postImport()
+	getExport = function(aClient, aPath, aRequestHeaders)
+		local headers =
+		{
+			["Content-Type"] = "text/plain",
+			["Content-Disposition"] = "attachment; filename=\"tariffPlan.txt\""
+		}
+		httpResponse.send(aClient, "200 OK", headers, tariffPlan.export())
+	end,
+
+
+
+
+
+	getImport = function(aClient, aPath, aRequestHeaders)
+		httpResponse.send(aClient, "200 OK", nil, require("Templates").tariffPlanImport())
+	end,
+
+
+
+
+
 	getTariffPlan = function(aClient, aPath, aRequestHeaders)
 		local body = require("Templates").tariffPlan({
 			currentTime = os.time(),
@@ -166,33 +188,6 @@ return {
 			exceptionDates = tariffPlan.exceptionDates,
 		})
 		httpResponse.send(aClient, "200 OK", nil, body)
-	end,
-
-
-
-
-
-	postAddNewExceptionDate = function(aClient, aPath, aRequestHeaders)
-		-- Parse the inputs:
-		local body = httpRequest.readBody(aClient, aRequestHeaders)
-		local m = multipart(body, aRequestHeaders["content-type"])
-		local exceptionDate = (m:get("exceptionDate") or {}).value
-		local dayType = tonumber((m:get("dayType") or {}).value)
-		if not(exceptionDate and dayType) then
-			return httpResponse.sendError(aClient, 400, "Missing required fields")
-		end
-
-		-- Check the validity:
-		if not(utils.checkYmdDate(exceptionDate)) then
-			return httpResponse.sendError(aClient, 400, "Invalid exception date")
-		end
-		if not(tariffPlan.dayTypeSchedules[dayType]) then
-			return httpResponse.sendError(aClient, 400, "No such DayType")
-		end
-
-		-- Add the exception:
-		tariffPlan.addNewExceptionDate(exceptionDate, dayType)
-		return httpResponse.sendRedirect(aClient, "/tariffPlan")
 	end,
 
 
@@ -248,6 +243,33 @@ return {
 
 
 
+	postAddNewExceptionDate = function(aClient, aPath, aRequestHeaders)
+		-- Parse the inputs:
+		local body = httpRequest.readBody(aClient, aRequestHeaders)
+		local m = multipart(body, aRequestHeaders["content-type"])
+		local exceptionDate = (m:get("exceptionDate") or {}).value
+		local dayType = tonumber((m:get("dayType") or {}).value)
+		if not(exceptionDate and dayType) then
+			return httpResponse.sendError(aClient, 400, "Missing required fields")
+		end
+
+		-- Check the validity:
+		if not(utils.checkYmdDate(exceptionDate)) then
+			return httpResponse.sendError(aClient, 400, "Invalid exception date")
+		end
+		if not(tariffPlan.dayTypeSchedules[dayType]) then
+			return httpResponse.sendError(aClient, 400, "No such DayType")
+		end
+
+		-- Add the exception:
+		tariffPlan.addNewExceptionDate(exceptionDate, dayType)
+		return httpResponse.sendRedirect(aClient, "/tariffPlan")
+	end,
+
+
+
+
+
 	postAddNewSeason = function(aClient, aPath, aRequestHeaders)
 		-- Parse the inputs:
 		local body = httpRequest.readBody(aClient, aRequestHeaders)
@@ -278,6 +300,30 @@ return {
 
 		-- Add:
 		tariffPlan.addNewSeason(startDate, endDate, workdayDayType, weekendDayType)
+		return httpResponse.sendRedirect(aClient, "/tariffPlan")
+	end,
+
+
+
+
+
+	postImport = function(aClient, aPath, aRequestHeaders)
+		-- Parse the inputs:
+		local body = httpRequest.readBody(aClient, aRequestHeaders)
+		local m = multipart(body, aRequestHeaders["content-type"])
+		local tariffPlanFileContents = (m:get("tariffPlanFile") or {}).value
+		if not(tariffPlanFileContents) then
+			return httpResponse.sendError(aClient, 400, "No file contents")
+		end
+
+		-- Parse the file:
+		local seasons, dayTypes, exceptionDates = tariffPlan.parseFile(tariffPlanFileContents)
+		if not(seasons) then
+			return httpResponse.sendError(aClient, 400, tostring(dayTypes))
+		end
+
+		-- Replace the plan:
+		tariffPlan.replace(seasons, dayTypes, exceptionDates)
 		return httpResponse.sendRedirect(aClient, "/tariffPlan")
 	end,
 

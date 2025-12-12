@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Home Energy Hub - Tariff Plan - Import</title>
+	<link rel="stylesheet" href="/static/main.css">
+</head>
+
+<body>
+<h1>Home Energy Hub - Tariff Plan</h1>
+
+<p>Select a file for importing the tariff plan from:</p>
+<form action="/tariffPlan/import" method="POST" enctype="multipart/form-data">
+	<input type="file" name="tariffPlanFile" placeholder="Select your tariffPlan.txt file" style="width:500px">
+	<button type="submit">Import</button>
+</form>
+
+</body>

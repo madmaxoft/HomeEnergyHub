@@ -35,6 +35,39 @@ local gMaxMonthDay =
 
 
 
+--- Returns true if the specified two tables have the same content (despite potentially being different instances)
+-- Note that this is ONLY intended for simple tables only, where keys are strings or numbers,
+-- and values are strings, numbers or tables
+function M.areTablesSame(aTable1, aTable2)
+	for k, v in pairs(aTable1) do
+		local v2 = aTable2[k]
+		if (type(v) ~= type(v2)) then
+			if not(v2) then
+				return false, tostring(k) .. ": Missing from 2nd table"
+			end
+			return false, tostring(k) .. ": Type mismatch"
+		end
+		if (type(v) == "table") then
+			local areSame, msg = M.areTablesSame(v, v2)
+			if not(areSame) then
+				return false, tostring(k) .. "." .. msg
+			end
+		elseif (v ~= v2) then
+			return false, tostring(k) .. ": Value mismatch"
+		end
+	end
+	for k, v in pairs(aTable2) do
+		if not(aTable1[k]) then
+			return false, tostring(k) .. ": Missing from 1st table"
+		end
+	end
+	return true
+end
+
+
+
+
+
 --- Returns true if the specified date string is a valid YYYY-MM-DD date representation
 function M.checkYmdDate(aDateStr)
 	assert(type(aDateStr) == "string")

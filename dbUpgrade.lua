@@ -120,6 +120,20 @@ local upgrades = {
 			RENAME COLUMN date TO exceptionDate;
 		]]
 	},
+
+	{
+		version = 4,
+		script = [[
+			ALTER TABLE TariffPlanSeasons
+			RENAME COLUMN startDate TO startDateYmd;
+
+			ALTER TABLE TariffPlanSeasons
+			RENAME COLUMN endDate TO endDateYmd;
+
+			ALTER TABLE TariffPlanExceptionDates
+			RENAME COLUMN exceptionDate TO exceptionDateYmd;
+		]]
+	},
 	-- Future upgrades can be added here
 }
 

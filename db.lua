@@ -320,6 +320,68 @@ end
 
 
 
+--- Returns an array-table of statistics for days in the specified range
+-- Each item has the day timeStamp, count of records and sum of timestamps (quick-n-dirty hash)
+function db.getElectricityConsumptionDailyStats(aFromTimeStamp, aToTimeStamp)
+	local SECONDS_PER_DAY = 24 * 60 * 60
+	local startDayTS = aFromTimeStamp - aFromTimeStamp % SECONDS_PER_DAY
+	local endDayTS = (aToTimeStamp + SECONDS_PER_DAY - 1) - (aToTimeStamp + SECONDS_PER_DAY - 1) % SECONDS_PER_DAY
+
+	local res = {}
+	local n = 0
+	for dayTS = startDayTS, endDayTS, SECONDS_PER_DAY do
+		local row = db.getArrayFromQuery([[
+			SELECT COUNT(*) AS cnt, SUM(timeStamp) as sumTs
+			FROM ElectricityConsumption
+			WHERE (timeStamp >= ?) AND (timeStamp < ?)
+		]], {dayTS, dayTS + SECONDS_PER_DAY}, "getElectricityConsumptionDailyStats")
+		if (row and row[1]) then
+			n = n + 1
+			res[n] = {timeStamp = dayTS, count = row[1].cnt, sum = row[1].sumTs}
+		end
+	end
+	res.n = n
+	return res
+end
+
+
+
+
+
+--- Returns the start and end timestamps of the raw data in ElectricityConsumption table
+-- Returns nil if no data at all
+function db.getElectricityConsumptionDataRange()
+	local row = db.getArrayFromQuery([[
+		SELECT
+		MIN(timeStamp) as minTimeStamp,
+		MAX(timeStamp) as maxTimeStamp
+		FROM ElectricityConsumption
+	]], {}, "getElectricityConsumptionDataRange")
+	if not(row and row[1]) then
+		return nil
+	end
+	return row[1].minTimeStamp, row[1].maxTimeStamp
+end
+
+
+
+
+
+--- Returns all the rows from ElectricityConsumption table in the specified interval
+function db.getElectricityConsumptionRawData(aStartTimeStamp, aEndTimeStamp)
+	assert(type(aStartTimeStamp) == "number")
+	assert(type(aEndTimeStamp) == "number")
+
+	return db.getArrayFromQuery([[
+		SELECT * FROM ElectricityConsumption
+		WHERE (timeStamp >= ?) AND (timeStamp < ?)
+	]], {aStartTimeStamp, aEndTimeStamp}, "getElectricityConsumptionRawData")
+end
+
+
+
+
+
 --- Returns array-table or {timeStamp, value} in between the specified timestamps, for creating a power graph.
 -- The values are queries from a table represented by the aggregation parameter, from the specified column name
 -- Returns nil, errorMsg in case of bad parameters. Raises an error on DB errors.

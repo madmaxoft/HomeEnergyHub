@@ -276,4 +276,33 @@ end
 
 
 
+--- Recursively serializes the specified table into a (dense) string
+function M.serializeTable(aTable)
+	assert(type(aTable) == "table")
+
+	-- Print the table members, sorted by key:
+	local res = {}
+	local n = 0
+	for k, v in pairs(aTable) do
+		if (type(v) == "table") then
+			n = n + 1
+			local keyRep
+			if (type(k) == "number") then
+				keyRep = tostring(k)
+			else
+				keyRep = string.format("%q", k)
+			end
+			res[n] = string.format("[%s]={%s},", tostring(keyRep), M.serializeTable(v))
+		else
+			n = n + 1
+			res[n] = string.format("%s=%s,", tostring(k), tostring(v))
+		end
+	end
+
+	return table.concat(res)
+end
+
+
+
+
 return M

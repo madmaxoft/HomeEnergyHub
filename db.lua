@@ -570,6 +570,43 @@ end
 
 
 
+function db.importElectricityConsumptionRows(aRows)
+	assert(type(aRows) == "table")
+
+	db.execBoundStatement("BEGIN TRANSACTION", {}, "importElectricityConsumption.begin")
+	local c = ensureDb()
+	local stmt = c:prepare([[
+		INSERT OR IGNORE INTO ElectricityConsumption
+		(timeStamp, powerTotal, powerA, powerB, powerC, energyTotal, energyA, energyB, energyC)
+		VALUES
+		(?, ?, ?, ?, ?, ?, ?, ?, ?)
+	]])
+	if not(stmt) then
+		error("Failed to prepare statement (importElectricityConsumption): " .. c:errmsg())
+	end
+	for _, row in ipairs(aRows) do
+		checkSql(c, stmt:bind_values(
+			row.timeStamp,
+			row.powerTotal,
+			row.powerA,
+			row.powerB,
+			row.powerC,
+			row.energyTotal,
+			row.energyA,
+			row.energyB,
+			row.energyC
+		), "importElectricityConsumption.bind")
+		checkSql(c, stmt:step(), "importElectricityConsumption.step")
+		checkSql(c, stmt:reset(), "importElectricityConsumption.reset")
+	end
+	checkSql(c, stmt:finalize(), "importElectricityConsumption.finalize")
+	db.execBoundStatement("COMMIT TRANSACTION", {}, "importElectricityConsumption.commit")
+end
+
+
+
+
+
 function db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
 	assert(type(aTableName) == "string")
 	assert(type(aTimeStamp) == "number")

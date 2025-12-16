@@ -41,7 +41,6 @@ end
 
 
 --- Returns a list of days within the specified interval with their stats (num records, timestamp sum as a hash)
--- The list format is LF-delimited timestamps of the start of day
 -- The interval is specified in fromTimeStamp and toTimeStamp parameters and is max 366 days long
 function M.getDailyStats(aClient, aPath, aRequestHeaders)
 	-- Parse query parameters:

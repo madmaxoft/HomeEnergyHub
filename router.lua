@@ -29,6 +29,7 @@ router.routes = {
 		{ path = "/rawDataExport/availableRange",       handler = require("Handlers.rawDataExport").getAvailableRange },
 		{ path = "/rawDataExport/dailyStats",           handler = require("Handlers.rawDataExport").getDailyStats },
 		{ path = "/rawDataExport/rawData",              handler = require("Handlers.rawDataExport").getRawData },
+		{ path = "/remoteImport",                       handler = require("Handlers.remoteImport").getRemoteImport },
 		{ path = "/savings?",                           handler = require("Handlers.savings").get },
 		{ path = "/tariffPlan/dayTypeGraph?",           handler = require("Handlers.tariffPlanUI").getDayTypeGraph },
 		{ path = "/tariffPlan/editDayType/",            handler = require("Handlers.tariffPlanUI").getEditDayType },
@@ -39,6 +40,8 @@ router.routes = {
 	},
 	POST =
 	{
+		{ path = "/remoteImport/start",                 handler = require("Handlers.remoteImport").postStart },
+		{ path = "/remoteImport/cancel",                handler = require("Handlers.remoteImport").postCancel },
 		{ path = "/tariffPlan/addNewDayType",           handler = require("Handlers.tariffPlanUI").postAddNewDayType },
 		{ path = "/tariffPlan/addNewExceptionDate",     handler = require("Handlers.tariffPlanUI").postAddNewExceptionDate },
 		{ path = "/tariffPlan/addNewSeason",            handler = require("Handlers.tariffPlanUI").postAddNewSeason },

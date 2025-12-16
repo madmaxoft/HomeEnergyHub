@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Home Energy Hub - Remote Import</title>
+	<link rel="stylesheet" href="/static/main.css">
+</head>
+
+
+<body>
+
+<h1>Home Energy Hub - Remote import</h1>
+
+<p>
+<a href="/">Home</a>
+</p>
+
+<% if (isRunning) then %>
+	<p>
+	The import from <%= remoteAddress %> is currently running:
+	<%= math.floor(1000 * ((currentTimeStamp or startTimeStamp) - startTimeStamp) / (endTimeStamp - startTimeStamp)) / 10 %> %
+	</p>
+	<form action="/remoteImport/cancel" method="POST">
+		<input type="submit" value="Abort" />
+	</form>
+	<p>
+	<a href="/remoteImport">Refresh</a>
+	</p>
+<% else %>
+	<% if lastResult ~= "" then %>
+	<p>
+	The result of the last import:
+	</p>
+	<pre><%= lastResult %></pre>
+	<% end %>
+	<table>
+		<tr>
+			<form action="/remoteImport/start" method="POST" enctype="multipart/form-data">
+			<th>Start import</th>
+			<td>Remote: </td>
+			<td><input type="text" name="remoteAddress" value="<%= remoteAddress %>" style="width:500px"/></td>
+			<td><input type="submit" value="Import" /></td>
+			</form>
+		</tr>
+	</table>
+<% end %>
+<pre><%= table.concat(progress or {}, "\n") %></pre>
+</body>
+</html>

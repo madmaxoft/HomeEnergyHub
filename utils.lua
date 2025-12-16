@@ -8,7 +8,19 @@ Implements various utility functions used throughout the app
 
 
 
-local M = {}
+local socket = require("socket")
+local copas = require("copas")
+local ltn12 = require("ltn12")
+local http = require("socket.http")
+
+
+
+
+
+local M =
+{
+	shouldUseBlockingHttp = false,  -- Set to true from clients to force blocking instead of copas-enabled http
+}
 
 
 
@@ -90,6 +102,56 @@ end
 
 
 
+--- Extracts the body from the full HTTP response (status line, headers, body)
+-- Mainly used in conjunction with M.httpRequest()
+function M.httpExtractBody(aFullHttpResponse)
+	assert(type(aFullHttpResponse) == "string")
+
+	return string.match(aFullHttpResponse, "^.-\r\n\r\n(.*)$")
+end
+
+
+
+
+
+--- Simple HTTP request that potentially uses Copas to avoid blocking.
+-- Returns true, responseHttpCode, responseHeaders and responseBody on success.
+-- On error, returns nil and error message
+-- If M.shouldUseBlockingHttp is set, uses a blocking TCP socket instead of copas-enabled socket
+function M.httpRequest(aUrl, aHttpVerb, aContent)
+	assert(type(aUrl) == "string")
+	assert(type(aHttpVerb) == "string")
+	aContent = aContent or ""
+	assert(type(aContent) == "string")
+
+	local resp = {}
+	local req =
+	{
+		url = aUrl,
+		method = aHttpVerb,
+		sink = ltn12.sink.table(resp),
+		create = function()
+			if (M.shouldUseBlockingHttp) then
+				return socket.tcp()
+			else
+				return copas.wrap(socket.tcp())
+			end
+		end,
+		source = ltn12.source.string(aContent),
+		headers =
+		{
+			["Content-Length"] = tostring(#aContent),
+			["Connection"] = "close"
+		}
+	}
+	local isSuccess, responseHttpCode, responseHeaders = http.request(req)
+	return isSuccess, responseHttpCode, responseHeaders, table.concat(resp)
+end
+
+
+
+
+
 --- Returns whether the specified year is a leap year
 function M.isLeapYear(aYear)
 	if ((aYear % 4) ~= 0) then
@@ -119,6 +181,44 @@ function M.isValidYmd(aYear, aMonth, aDay)
 		return false
 	end
 	return true
+end
+
+
+
+
+
+--- Returns the data string interpreted as Lua
+-- Used to load tables from strings
+-- Uses a sandbox to load the data
+-- Returns nil and error message on failure
+function M.loadDataString(aText)
+	if not(aText) then
+		return nil, "nil data"
+	end
+	assert(type(aText) == "string")
+
+	-- Wrap in 'return' so the chunk evaluates to a value
+	local chunkText = "return " .. aText
+
+	-- Load the string within a sandbox:
+	local chunk, err
+	if (_VERSION == "Lua 5.1") then
+		chunk, err = loadstring(chunkText)
+	else
+		chunk, err = load(chunkText, "sandbox", "t", {})
+	end
+	if not(chunk) then
+		return nil, err
+	end
+	if (_VERSION == "Lua 5.1") then
+		setfenv(chunk, {})
+	end
+	local isOK, result = pcall(chunk)
+	if not(isOK) then
+		return nil, result
+	end
+
+	return result
 end
 
 
@@ -301,6 +401,16 @@ function M.serializeTable(aTable)
 
 	return table.concat(res)
 end
+
+
+
+
+
+--- Convers a timestamp to a string representation YYYY-MM-DD
+function M.timeStampToYmd(aTimeStamp)
+	return os.date("%Y-%m-%d", aTimeStamp)
+end
+
 
 
 

@@ -70,7 +70,10 @@ function M.doImport()
 	M.addProgress("Fetching daily stats...")
 	local firstDayTs = M.startTimeStamp - (M.startTimeStamp % SECONDS_PER_DAY)
 	local lastDayTs = M.endTimeStamp - (M.endTimeStamp % SECONDS_PER_DAY)
-	local remoteDailyStats = M.fetchRemoteDailyStats(firstDayTs, lastDayTs)
+	local remoteDailyStats, msg = M.fetchRemoteDailyStats(firstDayTs, lastDayTs)
+	if not(remoteDailyStats) then
+		return nil, msg
+	end
 
 	-- Iterate day-by-day, oldest first:
 	for dayTs = firstDayTs, lastDayTs, SECONDS_PER_DAY do

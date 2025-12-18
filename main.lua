@@ -6,7 +6,17 @@
 
 
 
--- Compatibility between LuaJIT (as used while developing in ZeroBrane Studio) and Lua 5.1:
+-- Abort if running on Lua 5.1 (without LuaJIT):
+-- Lua 5.1 cannot yield across an xpcall(), thus hindering our HTTP handler error handling
+if ((_VERSION == "Lua 5.1") and not(jit)) then
+	error("This application requires Lua 5.2+ or LuaJIT")
+end
+
+
+
+
+
+-- Compatibility between plain LuaJIT and LuaJIT as used while developing in ZeroBrane Studio:
 package.path = "./?/init.lua;" .. package.path  -- Allow loading packages from subfolders with an init script
 table.unpack = table.unpack or unpack
 

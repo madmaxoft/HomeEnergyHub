@@ -99,9 +99,20 @@ function M.getRawData(aClient, aPath, aRequestHeaders)
 	timer("db.getElectricityConsumptionRawData")
 	local body = {}
 	for idx, row in ipairs(rawData) do
-		body[idx] = "{" .. utils.serializeTable(row) .. "},"
+		-- Note: This is a tight loop and has been optimized for speed, see test-rawDataExportPerf.lua
+		body[idx] =
+			"{ timeStamp = " .. row.timeStamp ..
+			", powerA = " .. tostring(row.powerA) ..
+			", powerB = " .. tostring(row.powerA) ..
+			", powerC = " .. tostring(row.powerA) ..
+			", powerTotal = " .. tostring(row.powerTotal) ..
+			", energyA = " .. tostring(row.EnergyA) ..
+			", energyB = " .. tostring(row.EnergyB) ..
+			", energyC = " .. tostring(row.EnergyC) ..
+			", energyTotal = " .. tostring(row.EnergyTotal) ..
+			"},\n"
 	end
-	timer("serializeTables")
+	timer("serializeRows")
 	body = "{" .. table.concat(body) .. "}"
 	timer("serializeBody")
 	return httpResponse.send(aClient, 200, "text/lua", body)

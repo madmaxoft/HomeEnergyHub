@@ -184,7 +184,7 @@ function M.fetchRemoteDailyStats(aStartDayTs, aEndDayTs)
 		M.remoteAddress, aStartDayTs, aEndDayTs
 	), "GET")
 	if not(isSuccess) then
-		return nil, string.format("Failed to query daily stats from the remote: %s" .. tostring(httpCode))
+		return nil, string.format("Failed to query daily stats from the remote: %s", tostring(httpCode))
 	end
 	if (httpCode ~= 200) then
 		return nil, string.format("The remote returned an HTTP error %d. %s", httpCode, tostring(response))

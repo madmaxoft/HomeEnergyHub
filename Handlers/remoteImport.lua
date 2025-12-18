@@ -17,6 +17,7 @@ local httpResponse = require("httpResponse")
 local multipart = require("multipart")
 local utils = require("utils")
 local copas = require("copas")
+local perf = require("perf")
 
 
 
@@ -66,11 +67,44 @@ function M.doImport()
 	end
 	M.currentTimeStamp = M.startTimeStamp
 
+	-- Process in month-long chunks:
+	local SECONDS_PER_MONTH = 30 * 24 * 60 * 60
+	for ts = M.endTimeStamp, M.startTimeStamp, -SECONDS_PER_MONTH do
+		if (M.shouldCancel) then
+			return nil, "Cancelled"
+		end
+		local isSuccess, msg = M.doImportChunk(ts - SECONDS_PER_MONTH, ts)
+		if not(isSuccess) then
+			M.addProgress("Failed to import chunk %s - %s: %s",
+				utils.timeStampToYmd(ts - SECONDS_PER_MONTH), utils.timeStampToYmd(ts),
+				tostring(msg)
+			)
+		end
+	end
+end
+
+
+
+
+
+function M.doImportChunk(aStartTs, aEndTs)
+	assert(type(aStartTs) == "number")
+	assert(type(aEndTs) == "number")
+	assert(aStartTs < aEndTs)
+	if (aStartTs < M.startTimeStamp) then
+		aStartTs = M.startTimeStamp
+	end
+	if (aEndTs > M.endTimeStamp) then
+		aEndTs = M.endTimeStamp
+	end
+
 	-- Fetch the daily stats:
-	M.addProgress("Fetching daily stats...")
-	local firstDayTs = M.startTimeStamp - (M.startTimeStamp % SECONDS_PER_DAY)
-	local lastDayTs = M.endTimeStamp - (M.endTimeStamp % SECONDS_PER_DAY)
+	local timer = perf.newTimer("remoteImport.doImportChunk")
+	M.addProgress("Fetching daily stats for %s - %s...", utils.timeStampToYmd(aStartTs), utils.timeStampToYmd(aEndTs))
+	local firstDayTs = aStartTs - (aStartTs % SECONDS_PER_DAY)
+	local lastDayTs = aEndTs - (aEndTs % SECONDS_PER_DAY)
 	local remoteDailyStats, msg = M.fetchRemoteDailyStats(firstDayTs, lastDayTs)
+	timer("fetchRemoteDailyStats")
 	if not(remoteDailyStats) then
 		return nil, msg
 	end
@@ -86,6 +120,7 @@ function M.doImport()
 		M.addProgress("Fetching day %s...", utils.timeStampToYmd(dayTs))
 		local remoteStats = remoteDailyStats[dayTs] or {}
 		local localStats = db.getElectricityConsumptionDailyStats(dayTs, dayTs + SECONDS_PER_DAY) or {{}}
+		timer("db.getElectricityConsumptonDailyStats")
 
 		-- Only sync if counts differ:
 		if (
@@ -93,8 +128,10 @@ function M.doImport()
 			(remoteStats.sum ~= localStats.sum)
 		) then
 			local rawRows, msg = M.fetchRemoteDayRawData(dayTs)
+			timer("fetchRemoteDayRawData")
 			if (rawRows) then
 				db.importElectricityConsumptionRows(rawRows)
+				timer("db.importElectricityConsumptionRows")
 			else
 				M.progress.n = M.progress.n + 1
 				M.progress[M.progress.n] = tostring(msg)

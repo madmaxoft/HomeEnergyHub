@@ -46,6 +46,7 @@ local lzlib     = requireWithHelp("zlib",      "lua-zlib")
 local multipart = requireWithHelp("multipart", "multipart")
 
 -- Load the templates and utils:
+package.path = "./?/init.lua;" .. package.path  -- Allow loading packages from subfolders with an init script
 print = require("logger")
 require("svgGraph")
 require("Templates")

@@ -92,33 +92,39 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 	assert(type(aTargetTable) == "string")
 
 	local numLoops = 0
-	while not(copas.exiting()) do
+	while not copas.exiting() do
 		if (aggregator.shouldPause) then
 			copas.sleep(5)
-			goto continueLoop
-		end
-
-		local startTs, endTs = findNextAggregationBucket(aTargetTable, aIntervalSeconds)
-		if (startTs) then
-			local agg = calcAggregationForBucket(startTs, endTs)
-			if (agg) then
-				db.insertAggregate(aTargetTable, startTs, agg)
-			else
-				-- Cannot aggregate the bucket, it is incomplete yet. Avoid busy-loop on end-of-data
-				print(string.format("[aggregator %d] Cannot aggregate bucket at %s", aIntervalSeconds, os.date("%Y-%m-%d %H:%M:%S", startTs)))
-				copas.sleep(10)
-			end
-			numLoops = (numLoops + 1) % 100
-			if (numLoops == 0) then
-				copas.sleep(1)  -- Occasionally pause for longer to let other tasks run, too
-			else
-				copas.sleep(0.01)  -- Avoid busy loop
-			end
 		else
-			print(string.format("[aggregator %d] No more available buckets in DB", aIntervalSeconds))
-			copas.sleep(30)
+			local startTs, endTs = findNextAggregationBucket(aTargetTable, aIntervalSeconds)
+
+			if (startTs) then
+				local agg = calcAggregationForBucket(startTs, endTs)
+				if (agg) then
+					db.insertAggregate(aTargetTable, startTs, agg)
+				else
+					print(string.format(
+						"[aggregator %d] Cannot aggregate bucket at %s",
+						aIntervalSeconds,
+						os.date("%Y-%m-%d %H:%M:%S", startTs)
+					))
+					copas.sleep(10)
+				end
+
+				numLoops = (numLoops + 1) % 100
+				if (numLoops == 0) then
+					copas.sleep(1)
+				else
+					copas.sleep(0.01)
+				end
+			else
+				print(string.format(
+					"[aggregator %d] No more available buckets in DB",
+					aIntervalSeconds
+				))
+				copas.sleep(30)
+			end
 		end
-		::continueLoop::
 	end
 end
 

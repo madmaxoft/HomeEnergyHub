@@ -6,6 +6,14 @@
 
 
 
+-- Compatibility between LuaJIT (as used while developing in ZeroBrane Studio) and Lua 5.1:
+package.path = "./?/init.lua;" .. package.path  -- Allow loading packages from subfolders with an init script
+table.unpack = table.unpack or unpack
+
+
+
+
+
 --- Same as Lua's built-in require, but on failure reports to the user a help string
 -- containing the specified LuaRocks' rock name to install
 local function requireWithHelp(aModuleName, aLuaRocksRockName)
@@ -46,7 +54,6 @@ local lzlib     = requireWithHelp("zlib",      "lua-zlib")
 local multipart = requireWithHelp("multipart", "multipart")
 
 -- Load the templates and utils:
-package.path = "./?/init.lua;" .. package.path  -- Allow loading packages from subfolders with an init script
 print = require("logger")
 require("svgGraph")
 require("Templates")

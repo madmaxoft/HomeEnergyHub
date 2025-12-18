@@ -19,6 +19,7 @@ local db = require("db")
 local httpRequest = require("httpRequest")
 local httpResponse = require("httpResponse")
 local utils = require("utils")
+local perf = require("perf")
 
 
 
@@ -78,6 +79,7 @@ end
 -- The interval is specified in fromTimeStamp and toTimeStamp parameters and is max 25 hours long
 function M.getRawData(aClient, aPath, aRequestHeaders)
 	-- Parse query parameters:
+	local timer = perf.newTimer("rawDataExport.getRawData")
 	local path, query = httpRequest.parseRequestPath(aPath)
 	local fromTimeStamp = tonumber(query.fromTimeStamp)
 	local toTimeStamp = tonumber(query.toTimeStamp)
@@ -94,11 +96,15 @@ function M.getRawData(aClient, aPath, aRequestHeaders)
 	end
 
 	local rawData = db.getElectricityConsumptionRawData(fromTimeStamp, toTimeStamp)
+	timer("db.getElectricityConsumptionRawData")
 	local body = {}
 	for idx, row in ipairs(rawData) do
 		body[idx] = "{" .. utils.serializeTable(row) .. "},"
 	end
-	return httpResponse.send(aClient, 200, "text/lua", "{" .. table.concat(body) .. "}")
+	timer("serializeTables")
+	body = "{" .. table.concat(body) .. "}"
+	timer("serializeBody")
+	return httpResponse.send(aClient, 200, "text/lua", body)
 end
 
 

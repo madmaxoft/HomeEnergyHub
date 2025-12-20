@@ -10,6 +10,15 @@ Route handlers live in the Handlers subfolder.
 
 
 
+local httpResponse = require("httpResponse")
+local httpRequest = require("httpRequest")
+local socket = require("socket")
+local log = require("logger").log
+
+
+
+
+
 local router = {}
 
 
@@ -55,9 +64,63 @@ router.routes = {
 
 
 
+--- Calls the specified handler safely - if an error is raised, an error page is served
+function router.dispatchHandler(aClient, aPath, aHeaders, aHandler)
+	assert(type(aPath) == "string")
+	assert(type(aHeaders) == "table")
+	assert(type(aHandler) == "function")
+
+	-- Error handler that adds traceback
+	local function onError(aErr)
+		return debug.traceback(aErr, 2)
+	end
+
+	-- run handler safely
+	local isOK, result = xpcall(function()
+		return aHandler(aClient, aPath, aHeaders)
+	end, onError)
+
+	-- if an exception occurred
+	if not(isOK) then
+		local errText = result or "Unknown error"
+		log("router", "ERROR during request:\n" .. errText)
+		httpResponse.sendError(aClient, 500, errText)
+	end
+end
+
+
+
+
+
+--- Handles a single HTTP client connection
+function router.handleRequest(aClient)
+	local method, path, headers = httpRequest.readRequestHeaders(aClient)
+	if (not(method) or not(path)) then
+		return
+	end
+
+	local handler = router.findHandler(method, path)
+	if (handler) then
+		local beginTime = socket.gettime()
+		log("main", "%s Request for path \"%s\".", method, path)
+		router.dispatchHandler(aClient, path, headers, handler)
+		local endTime = socket.gettime()
+		if (endTime - beginTime >= 0.5) then
+			log("router", "  ^^ Request took %f seconds.", (endTime - beginTime))
+		end
+	else
+		log("router", "UNHANDLED: %s Request for path \"%s\".", method, path)
+		httpResponse.sendError(aClient, 404, "Not found")
+	end
+end
+
+
+
+
+
 --- Returns the handler matching the specified method and path
 -- Returns nil if no match found
-function router.match(aMethod, aPath)
+function router.findHandler(aMethod, aPath)
 	assert(type(aMethod) == "string")
 	assert(type(aPath) == "string")
 

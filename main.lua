@@ -58,7 +58,7 @@ end
 
 
 
--- Load all the required rocks, in their dependency order:
+-- Load all the required LuaRocks, in their dependency order:
 local lfs       = requireWithHelp("lfs",       "luafilesystem")
 local socket    = requireWithHelp("socket",    "luasocket")
 local copas     = requireWithHelp("copas",     "copas")
@@ -68,12 +68,10 @@ local etlua     = requireWithHelp("etlua",     "etlua")
 local lzlib     = requireWithHelp("zlib",      "lua-zlib")
 local multipart = requireWithHelp("multipart", "multipart")
 
--- Load the templates and utils:
+-- Load the app modules:
 local log = require("logger").log
 require("svgGraph")
 require("Templates")
-local httpResponse = require("httpResponse")
-local httpRequest = require("httpRequest")
 local db = require("db")
 db.createSchema()
 local router = require("router")
@@ -84,68 +82,14 @@ local aggregator = require("aggregator")
 
 
 
---- Calls the specified handler safely - if an error is raised, an error page is served
-local function dispatchHandler(aClient, aPath, aHeaders, aHandler)
-	assert(type(aPath) == "string")
-	assert(type(aHeaders) == "table")
-	assert(type(aHandler) == "function")
-
-	-- Error handler that adds traceback
-	local function onError(aErr)
-		return debug.traceback(aErr, 2)
-	end
-
-	-- run handler safely
-	local isOK, result = xpcall(function()
-		return aHandler(aClient, aPath, aHeaders)
-	end, onError)
-
-	-- if an exception occurred
-	if not(isOK) then
-		local errText = result or "Unknown error"
-		log("main", "ERROR during request:\n" .. errText)
-		httpResponse.sendError(aClient, 500, errText)
-	end
-end
-
-
-
-
-
---- Handles a single HTTP client connection
-local function handleRequest(aClient)
-	local method, path, headers = httpRequest.readRequestHeaders(aClient)
-	if (not(method) or not(path)) then
-		return
-	end
-
-	local handler = router.match(method, path)
-	if (handler) then
-		local beginTime = socket.gettime()
-		log("main", "%s Request for path \"%s\".", method, path)
-		dispatchHandler(aClient, path, headers, handler)
-		local endTime = socket.gettime()
-		if (endTime - beginTime >= 0.5) then
-			log("main", "  ^^ Request took %f seconds.", (endTime - beginTime))
-		end
-	else
-		log("main", "UNHANDLED: %s Request for path \"%s\".", method, path)
-		httpResponse.sendError(aClient, 404, "Not found")
-	end
-end
-
-
-
-
-
 --- Starts the Copas HTTP server on port 5500
 local function startServer()
 	local serverSocket = assert(socket.bind("*", 5500))
-	log("main", "Server running on http://localhost:5500/")
+	log("main", "Server listening on http://localhost:5500/")
 
 	copas.mainServer = serverSocket
 	copas.addserver(serverSocket, function(aSocket)
-		handleRequest(copas.wrap(aSocket))
+		router.handleRequest(copas.wrap(aSocket))
 	end)
 end
 

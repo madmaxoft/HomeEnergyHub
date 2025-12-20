@@ -10,6 +10,7 @@ Implements the data aggregation in background threads
 
 local copas = require("copas")
 local db = require("db")
+local log = require("logger").log
 
 
 
@@ -91,6 +92,7 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 	assert(type(aIntervalSeconds) == "number")
 	assert(type(aTargetTable) == "string")
 
+	local subsystemName = string.format("aggregator %d", aIntervalSeconds)
 	local numLoops = 0
 	while not copas.exiting() do
 		if (aggregator.shouldPause) then
@@ -103,11 +105,10 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 				if (agg) then
 					db.insertAggregate(aTargetTable, startTs, agg)
 				else
-					print(string.format(
-						"[aggregator %d] Cannot aggregate bucket at %s",
-						aIntervalSeconds,
+					log(subsystemName,
+						"Cannot aggregate bucket at %s",
 						os.date("%Y-%m-%d %H:%M:%S", startTs)
-					))
+					)
 					copas.sleep(10)
 				end
 
@@ -118,10 +119,10 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 					copas.sleep(0.01)
 				end
 			else
-				print(string.format(
+				log(subsystemName,
 					"[aggregator %d] No more available buckets in DB",
 					aIntervalSeconds
-				))
+				)
 				copas.sleep(30)
 			end
 		end

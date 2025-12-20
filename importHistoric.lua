@@ -1,6 +1,7 @@
 -- importHistoric.lua
 
---[[ Imports historical tall-format meter data into the new wide-format ElectricityConsumption table.
+--[[
+Imports historical tall-format meter data into the new wide-format ElectricityConsumption table.
 Buckets data into 5-second intervals.
 Optimized for batch insertion and progress reporting.
 

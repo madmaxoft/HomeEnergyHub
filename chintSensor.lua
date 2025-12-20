@@ -8,6 +8,12 @@ Usage: copas.addthread(require("chintSensor"))
 
 
 
+local log = require("logger").log
+
+
+
+
+
 --- The UDP port to listen for incoming sensor data:
 local gSensorPort = 5556
 
@@ -86,7 +92,7 @@ local function receiveLoop()
 	listener:setsockname("*", gSensorPort)
 	listener:settimeout(0)
 	listener = copas.wrap(listener)
-	print("[chint] Listening for data on UDP port " .. gSensorPort)
+	log("chint", "Listening for data on UDP port %d", gSensorPort)
 
 	-- receive loop
 	while not(copas.exiting()) do
@@ -113,7 +119,7 @@ local function receiveLoop()
 
 	-- flush on exit
 	commitBucket()
-	print("[chint] Finished")
+	log("chint", "Finished")
 end
 
 

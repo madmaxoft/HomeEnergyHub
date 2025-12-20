@@ -18,6 +18,7 @@ local multipart = require("multipart")
 local utils = require("utils")
 local copas = require("copas")
 local perf = require("perf")
+local log = require("logger").log
 
 
 
@@ -194,7 +195,7 @@ function M.fetchRemoteDailyStats(aStartDayTs, aEndDayTs)
 	if not(statsResponse) then
 		return nil, "Failed to parse daily stats from the remote: " .. tostring(msg)
 	end
-	print(string.format("[remoteImport] Received daily stats from remote %s", M.remoteAddress))
+	log("remoteImport", "Received daily stats from remote %s", M.remoteAddress)
 
 	-- Build lookup table: dayTs -> {count = ..., sum = ...}
 	local remoteDailyStats = {}
@@ -236,9 +237,9 @@ function M.fetchRemoteDayRawData(aDayTimeStamp)
 			utils.timeStampToYmd(aDayTimeStamp), tostring(msg)
 		)
 	end
-	print(string.format("[remoteImport] Received day %s from remote %s",
+	log("remoteImport", "Received day %s from remote %s",
 		utils.timeStampToYmd(aDayTimeStamp), M.remoteAddress
-	))
+	)
 	rawRows.n = #rawRows
 	return rawRows
 end
@@ -283,7 +284,7 @@ function M.postStart(aClient, aPath, aRequestHeaders)
 
 	-- Start the import:
 	M.remoteAddress = remoteAddress
-	print(string.format("[remoteImport] Importing from %s", M.remoteAddress))
+	log("remoteImport", "Importing from %s", M.remoteAddress)
 
 	copas.addthread(M.runImport)
 	return httpResponse.sendRedirect(aClient, "/remoteImport")
@@ -304,9 +305,9 @@ function M.runImport()
 	local isOK, msg = M.doImport()
 	if not(isOK) then
 		M.lastResult = tostring(msg)
-		print(string.format("[remoteImport] Failed to import from %s: %s", M.remoteAddress, tostring(msg)))
+		log("remoteImport", "Failed to import from %s: %s", M.remoteAddress, tostring(msg))
 	else
-		print(string.format("[remoteImport] Finished importing from %s", M.remoteAddress))
+		log("remoteImport", "Finished importing from %s", M.remoteAddress)
 	end
 	M.isRunning = false
 end

@@ -69,7 +69,7 @@ local lzlib     = requireWithHelp("zlib",      "lua-zlib")
 local multipart = requireWithHelp("multipart", "multipart")
 
 -- Load the templates and utils:
-print = require("logger")
+local log = require("logger").log
 require("svgGraph")
 require("Templates")
 local httpResponse = require("httpResponse")
@@ -103,7 +103,7 @@ local function dispatchHandler(aClient, aPath, aHeaders, aHandler)
 	-- if an exception occurred
 	if not(isOK) then
 		local errText = result or "Unknown error"
-		print("[main] ERROR during request:\n" .. errText)
+		log("main", "ERROR during request:\n" .. errText)
 		httpResponse.sendError(aClient, 500, errText)
 	end
 end
@@ -122,14 +122,14 @@ local function handleRequest(aClient)
 	local handler = router.match(method, path)
 	if (handler) then
 		local beginTime = socket.gettime()
-		print(string.format("[main] %s Request for path \"%s\".", method, path))
+		log("main", "%s Request for path \"%s\".", method, path)
 		dispatchHandler(aClient, path, headers, handler)
 		local endTime = socket.gettime()
 		if (endTime - beginTime >= 0.5) then
-			print(string.format("  ^^ Request took %f seconds.", (endTime - beginTime)))
+			log("main", "  ^^ Request took %f seconds.", (endTime - beginTime))
 		end
 	else
-		print(string.format("[main] UNHANDLED: %s Request for path \"%s\".", method, path))
+		log("main", "UNHANDLED: %s Request for path \"%s\".", method, path)
 		httpResponse.sendError(aClient, 404, "Not found")
 	end
 end
@@ -141,7 +141,7 @@ end
 --- Starts the Copas HTTP server on port 5500
 local function startServer()
 	local serverSocket = assert(socket.bind("*", 5500))
-	print("[main] Server running on http://localhost:5500/")
+	log("main", "Server running on http://localhost:5500/")
 
 	copas.mainServer = serverSocket
 	copas.addserver(serverSocket, function(aSocket)
@@ -163,6 +163,7 @@ end
 
 
 --- Start everything:
+log("main", "Starting up...")
 startSensors()
 -- aggregator.start(          60, "ElectricityConsumptionAggregate1min")
 -- aggregator.start(     15 * 60, "ElectricityConsumptionAggregate15min")
@@ -171,4 +172,4 @@ startServer()
 
 copas.loop()
 
-print("[main] Finished.")
+log("main", "Finished.")

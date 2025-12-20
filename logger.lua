@@ -13,14 +13,6 @@ Usage:
 
 
 
-local tostring = tostring
-local select = select
-local osdate = os.date
-local tblconcat = table.concat
-
-
-
-
 local L = {}
 
 
@@ -29,7 +21,7 @@ local L = {}
 
 function L.log(aSubsystemName, aMessageFmt, ...)
 	local msg = string.format(aMessageFmt, ...)
-	local timeStamp = osdate("[%Y-%m-%d %H:%M:%S]")
+	local timeStamp = os.date("[%Y-%m-%d %H:%M:%S]")
 	print(string.format("%s [%s] %s", timeStamp, aSubsystemName, msg))
 end
 

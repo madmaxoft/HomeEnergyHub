@@ -40,12 +40,17 @@ local function requireWithHelp(aModuleName, aLuaRocksRockName)
 		-- No LuaRocks rock name given, output a generic error message:
 		error("Cannot load module " .. aModuleName .. ": " .. tostring(m))
 	end
+	local luaVersionArg = ""
+	local luaVersion = string.match(_VERSION, ".- (%d.%d)")
+	if (luaVersion) then
+		luaVersionArg = " --lua-version=" .. luaVersion
+	end
 	error(string.format(
 		"Cannot load module %s: %s\n\n" ..
 		"You can install it using the following LuaRocks command:\n" ..
-		"sudo luarocks install %s",
+		"sudo luarocks install %s%s",
 		aModuleName, tostring(m),
-		aLuaRocksRockName
+		aLuaRocksRockName, luaVersionArg
 	))
 end
 

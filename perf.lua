@@ -16,6 +16,7 @@ timer("op2")
 
 
 local socket = require("socket")
+local log = require("logger").log
 
 
 
@@ -48,10 +49,10 @@ function M.newTimer(aName)
 		last = now
 
 		if (aLabel) then
-			print(string.format(
-				"[perf] %-50s %+7.2f ms (total %7.2f ms)",
-				aLabel, delta, total
-			))
+			log("perf",
+				"%-40s %-50s %+7.2f ms (total %7.2f ms)",
+				aName, aLabel, delta, total
+			)
 		end
 	end
 end

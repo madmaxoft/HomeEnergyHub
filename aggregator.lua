@@ -119,10 +119,7 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 					copas.sleep(0.01)
 				end
 			else
-				log(subsystemName,
-					"[aggregator %d] No more available buckets in DB",
-					aIntervalSeconds
-				)
+				log(subsystemName, "No more available buckets in DB")
 				copas.sleep(30)
 			end
 		end

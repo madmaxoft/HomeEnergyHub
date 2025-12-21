@@ -1,7 +1,7 @@
 -- aggregator.lua
 
 --[[
-Implements the data aggregation in background threads
+Implements the data aggregation in background threads.
 --]]
 
 
@@ -11,19 +11,17 @@ Implements the data aggregation in background threads
 local copas = require("copas")
 local db = require("db")
 local log = require("logger").log
+local perf = require("perf")
 
 
 
 
 
-local aggregator = {}
-
-
-
-
-
---- Public kill switch:
-aggregator.shouldPause = false
+local aggregator =
+{
+	-- Pause switch, activated when remoteImport is underway
+	shouldPause = false,
+}
 
 
 
@@ -96,14 +94,18 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 	local numLoops = 0
 	while not copas.exiting() do
 		if (aggregator.shouldPause) then
-			copas.sleep(5)
+			copas.sleep(1)
 		else
+			local timer = perf.newTimer(subsystemName)
 			local startTs, endTs = findNextAggregationBucket(aTargetTable, aIntervalSeconds)
+			timer("findNextAggregationBucket")
 
 			if (startTs) then
 				local agg = calcAggregationForBucket(startTs, endTs)
+				timer("calcAggregationForBucket")
 				if (agg) then
 					db.insertAggregate(aTargetTable, startTs, agg)
+					timer("insertAggregate")
 				else
 					log(subsystemName,
 						"Cannot aggregate bucket at %s",
@@ -112,7 +114,8 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 					copas.sleep(10)
 				end
 
-				numLoops = (numLoops + 1) % 100
+				-- Every 20 loops sleep for a longer time to give other threads a chance to run, too
+				numLoops = (numLoops + 1) % 20
 				if (numLoops == 0) then
 					copas.sleep(1)
 				else
@@ -128,16 +131,22 @@ end
 
 
 
---- Starts a new aggregator Copas thread
--- aIntervalSeconds: length of aggregation bucket
--- aTargetTable: table name as string
-function aggregator.start(aIntervalSeconds, aTargetTable)
-	assert(type(aIntervalSeconds) == "number")
-	assert(type(aTargetTable) == "string")
 
+
+--- Starts the aggregator Copas threads
+function aggregator.start()
 	copas.addthread(function()
-		aggregatorLoop(aIntervalSeconds, aTargetTable)
+		aggregatorLoop(60, "ElectricityConsumptionAggregate1min")
 	end)
+	--[[
+	copas.addthread(function()
+		aggregatorLoop(15 * 60, "ElectricityConsumptionAggregate15min")
+	end)
+	copas.addthread(function()
+		aggregatorLoop(24 * 60 * 60, "ElectricityConsumptionAggregateDay")
+	end)
+	--]]
+	log("aggregators", "Started aggregations")
 end
 
 
@@ -145,8 +154,10 @@ end
 
 
 -- Export the local helper functions in order to facilitate testing:
-aggregator.debug = {
+aggregator.debug =
+{
 	findNextAggregationBucket = findNextAggregationBucket,
 	calcAggregationForBucket = calcAggregationForBucket,
 }
+
 return aggregator

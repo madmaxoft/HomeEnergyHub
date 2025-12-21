@@ -134,6 +134,76 @@ local upgrades = {
 			RENAME COLUMN exceptionDate TO exceptionDateYmd;
 		]]
 	},
+
+	{
+		-- Drop the aggregation data in the main DB and move it into the attached aggregated.sqlite DB file:
+		version = 5,
+		script = [[
+			DROP TABLE IF EXISTS ElectricityConsumptionAggregate1min;
+			DROP TABLE IF EXISTS ElectricityConsumptionAggregate15min;
+			DROP TABLE IF EXISTS ElectricityConsumptionAggregateDay;
+
+			CREATE TABLE aggr.ElectricityConsumptionAggregate1min (
+				timeStamp INTEGER PRIMARY KEY,
+				avgPowerTotal REAL,
+				avgPowerA REAL,
+				avgPowerB REAL,
+				avgPowerC REAL,
+				minPowerTotal REAL,
+				minPowerA REAL,
+				minPowerB REAL,
+				minPowerC REAL,
+				maxPowerTotal REAL,
+				maxPowerA REAL,
+				maxPowerB REAL,
+				maxPowerC REAL,
+				energyTotal REAL,
+				energyA REAL,
+				energyB REAL,
+				energyC REAL
+			);
+
+			CREATE TABLE aggr.ElectricityConsumptionAggregate15min (
+				timeStamp INTEGER PRIMARY KEY,
+				avgPowerTotal REAL,
+				avgPowerA REAL,
+				avgPowerB REAL,
+				avgPowerC REAL,
+				minPowerTotal REAL,
+				minPowerA REAL,
+				minPowerB REAL,
+				minPowerC REAL,
+				maxPowerTotal REAL,
+				maxPowerA REAL,
+				maxPowerB REAL,
+				maxPowerC REAL,
+				energyTotal REAL,
+				energyA REAL,
+				energyB REAL,
+				energyC REAL
+			);
+
+			CREATE TABLE aggr.ElectricityConsumptionAggregateDay (
+				timeStamp INTEGER PRIMARY KEY,
+				avgPowerTotal REAL,
+				avgPowerA REAL,
+				avgPowerB REAL,
+				avgPowerC REAL,
+				minPowerTotal REAL,
+				minPowerA REAL,
+				minPowerB REAL,
+				minPowerC REAL,
+				maxPowerTotal REAL,
+				maxPowerA REAL,
+				maxPowerB REAL,
+				maxPowerC REAL,
+				energyTotal REAL,
+				energyA REAL,
+				energyB REAL,
+				energyC REAL
+			);
+		]],
+	},
 	-- Future upgrades can be added here
 }
 
@@ -244,6 +314,7 @@ function dbUpgrade.upgradeIfNeeded(aDbFileName)
 	end
 	conn = sqlite3.open(aDbFileName)
 	conn:busy_timeout(1000)
+	conn:exec("ATTACH \"aggregated.sqlite\" as aggr")
 
 	-- Ensure KeyValue table exists early for first-time DBs
 	conn:exec("CREATE TABLE IF NOT EXISTS KeyValue (key TEXT PRIMARY KEY, value TEXT);")

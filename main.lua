@@ -109,9 +109,7 @@ end
 --- Start everything:
 log("main", "Starting up...")
 startSensors()
--- aggregator.start(          60, "ElectricityConsumptionAggregate1min")
--- aggregator.start(     15 * 60, "ElectricityConsumptionAggregate15min")
--- aggregator.start(24 * 60 * 60, "ElectricityConsumptionAggregateDay")
+aggregator.start()
 startServer()
 
 copas.loop()

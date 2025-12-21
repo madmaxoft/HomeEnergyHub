@@ -2,6 +2,11 @@
 -- Database access module
 
 local sqlite3 = require("lsqlite3")
+local perf = require("perf")
+
+
+
+
 
 local db = {}
 local dbFile = "homeEnergyHub.sqlite"
@@ -60,19 +65,6 @@ local gElectricityConsumptionAggregationValidColumnNames = {
 
 
 
---- Ensures an open DB connection
-local function ensureDb()
-	if not(conn) then
-		conn = sqlite3.open(dbFile)
-		conn:busy_timeout(1000)
-	end
-	return conn
-end
-
-
-
-
-
 --- Checks SQLite result codes and throws errors
 local function checkSql(aConn, aResult, aContext)
 	if (
@@ -82,6 +74,20 @@ local function checkSql(aConn, aResult, aContext)
 	) then
 		error(string.format("SQLite error in %s: %s", aContext or "unknown", aConn:errmsg()))
 	end
+end
+
+
+
+
+
+--- Ensures an open DB connection
+local function ensureDb()
+	if not(conn) then
+		conn = sqlite3.open(dbFile)
+		conn:busy_timeout(1000)
+		checkSql(conn, conn:execute("ATTACH \"aggregated.sqlite\" as aggr"), "ensureDb.attach")
+	end
+	return conn
 end
 
 
@@ -498,18 +504,20 @@ function db.getLatestMissingAggregateBucket(aTargetTable, aIntervalSeconds)
 	assert(type(aIntervalSeconds) == "number")
 
 	-- Step 1: get min and max timestamps from raw table
+	local timer = perf.newTimer("db.getLatestMissingAggregateBucket")
 	local rows = db.getArrayFromQuery([[
 		SELECT MIN(timeStamp) AS minTs, MAX(timeStamp) AS maxTs
 		FROM ElectricityConsumption
 	]], {}, "getLatestMissingAggregateBucket min/max")
+	timer("getMinMax")
 
-	if (not rows or not rows[1] or not rows[1].minTs) then
+	if (not(rows) or not(rows[1]) or not(rows[1].minTs)) then
 		return nil
 	end
 
 	-- Align to interval boundaries
-	local startTs = math.floor(rows[1].minTs / aIntervalSeconds) * aIntervalSeconds
-	local endTs   = math.floor(rows[1].maxTs / aIntervalSeconds) * aIntervalSeconds
+	local startTs = rows[1].minTs - rows[1].minTs % aIntervalSeconds
+	local endTs   = rows[1].maxTs - rows[1].maxTs % aIntervalSeconds
 	assert(endTs <= rows[1].maxTs)
 
 	-- Step 2: CTE to generate all aligned buckets and find the latest missing one
@@ -531,6 +539,7 @@ function db.getLatestMissingAggregateBucket(aTargetTable, aIntervalSeconds)
 	local bind = { endTs - aIntervalSeconds, aIntervalSeconds, startTs }
 
 	local missingRows = db.getArrayFromQuery(sql, bind, "getLatestMissingAggregateBucket CTE")
+	timer("CTE")
 	if (missingRows and missingRows[1]) then
 		assert(missingRows[1].ts < endTs)
 		return missingRows[1].ts
@@ -613,7 +622,7 @@ function db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
 	assert(type(aAggregatedMeasurement) == "table")
 
 	db.execBoundStatement([[
-		INSERT OR REPLACE INTO ]] .. aTableName .. [[ (
+		INSERT OR REPLACE INTO aggr.]] .. aTableName .. [[ (
 			timeStamp,
 			avgPowerTotal, avgPowerA, avgPowerB, avgPowerC,
 			minPowerTotal, minPowerA, minPowerB, minPowerC,

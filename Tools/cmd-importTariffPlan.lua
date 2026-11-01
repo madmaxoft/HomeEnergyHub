@@ -2,11 +2,15 @@
 
 --[[
 Command-line tool to import tariff plan from a specified file
+
+NOTE: Needs to be run from the main app folder
 --]]
 
 
 
 
+
+local db = require("db")
 
 --- Read the input data:
 local arg = {...}
@@ -20,7 +24,6 @@ if (f ~= io.stdin) then
 end
 
 -- Parse the plan data:
-local db = require("db")
 db.createSchema()
 local tariffPlan = require("tariffPlan")
 local schedules, dayTypes, exceptionDates = assert(tariffPlan.parseFile(plan))

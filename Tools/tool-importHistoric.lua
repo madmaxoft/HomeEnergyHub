@@ -1,12 +1,14 @@
--- importHistoric.lua
+-- tool-importHistoric.lua
 
 --[[
 Imports historical tall-format meter data into the new wide-format ElectricityConsumption table.
 Buckets data into 5-second intervals.
 Optimized for batch insertion and progress reporting.
 
-Usage: lua importHistoric.lua [<oldDb>]
+Usage: luajit Tools/importHistoric.lua [<oldDb>]
 <oldDb> defaults to Meters.sqlite if not provided
+
+NOTE: Needs to be run from the main app folder
 --]]
 
 
@@ -78,7 +80,7 @@ local function importOldDb(aDbName)
 				if (nBatch >= batchSize) then
 					batch.n = nBatch
 					db.saveMultipleElectricityMeasurements(batch)
-					print(string.format("Saved %d buckets", nBatch))
+					print(string.format("Saved %d buckets ending at timestamp %d (%s)", nBatch, tsBucket, os.date("!%Y-%m-%d", tsBucket)))
 					batch = {}
 					nBatch = 0
 				end

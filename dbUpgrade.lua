@@ -204,6 +204,40 @@ local upgrades = {
 			);
 		]],
 	},
+
+	{
+		version = 6,
+		script =
+		[[
+			CREATE TABLE aggr.AggregationProgress (
+				tableName TEXT PRIMARY KEY,
+				nextBucket INTEGER
+			);
+
+			ALTER TABLE aggr.ElectricityConsumptionAggregate1min DROP COLUMN avgPowerTotal;
+			ALTER TABLE aggr.ElectricityConsumptionAggregate1min DROP COLUMN avgPowerA;
+			ALTER TABLE aggr.ElectricityConsumptionAggregate1min DROP COLUMN avgPowerB;
+			ALTER TABLE aggr.ElectricityConsumptionAggregate1min DROP COLUMN avgPowerC;
+
+			ALTER TABLE aggr.ElectricityConsumptionAggregate15min DROP COLUMN avgPowerTotal;
+			ALTER TABLE aggr.ElectricityConsumptionAggregate15min DROP COLUMN avgPowerA;
+			ALTER TABLE aggr.ElectricityConsumptionAggregate15min DROP COLUMN avgPowerB;
+			ALTER TABLE aggr.ElectricityConsumptionAggregate15min DROP COLUMN avgPowerC;
+
+			ALTER TABLE aggr.ElectricityConsumptionAggregateDay DROP COLUMN avgPowerTotal;
+			ALTER TABLE aggr.ElectricityConsumptionAggregateDay DROP COLUMN avgPowerA;
+			ALTER TABLE aggr.ElectricityConsumptionAggregateDay DROP COLUMN avgPowerB;
+			ALTER TABLE aggr.ElectricityConsumptionAggregateDay DROP COLUMN avgPowerC;
+		]],
+	},
+
+	{
+		version = 7,
+		script =
+		[[
+			CREATE INDEX idx_ElectricityConsumption_timeStamp ON ElectricityConsumption(timeStamp);
+		]],
+	},
 	-- Future upgrades can be added here
 }
 
@@ -212,15 +246,23 @@ local upgrades = {
 
 
 --- Copies a file in binary mode
+-- Raises an error if any IO fails.
 local function copyFile(aSrc, aDst)
 	local inFile = assert(io.open(aSrc, "rb"))
-	local data = inFile:read("*a")
-	inFile:close()
-
 	local outFile = assert(io.open(aDst, "wb"))
-	outFile:write(data)
+
+	while (true) do
+		local data = inFile:read(1024 * 1024)
+		if not(data) then
+			break
+		end
+		assert(outFile:write(data))
+	end
+
+	inFile:close()
 	outFile:close()
 end
+
 
 
 

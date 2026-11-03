@@ -33,7 +33,7 @@ local M = {}
 
 --- Returns two timestamps, each on a separate line, specifying the start and end of raw data in the DB
 function M.getAvailableRange(aClient, aPath, aRequestHeaders)
-	local startTimeStamp, endTimeStamp = db.getElectricityConsumptionDataRange()
+	local startTimeStamp, endTimeStamp = db.electricityConsumptionDataRange()
 	return httpResponse.send(aClient, 200, "text/plain", string.format("%d\n%d\n", startTimeStamp, endTimeStamp))
 end
 

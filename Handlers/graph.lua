@@ -14,7 +14,7 @@ The following parameters are accepted:
 	- "interval": the number of seconds covered by the graph
 	- "width": the graph width. Defaults to 1500
 Data series aggregation can be:
-	- 5 (no aggregation, raw data
+	- 5 (no aggregation, raw data)
 	- 60 (1 minute)
 	- 900 (15 minutes)
 	- 86400 (1 day)

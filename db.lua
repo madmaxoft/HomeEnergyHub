@@ -38,10 +38,6 @@ local gElectricityConsumptionAggregationValidColumns = {
 	minPowerB = true,
 	minPowerC = true,
 	minPowerTotal = true,
-	avgPowerA = true,
-	avgPowerB = true,
-	avgPowerC = true,
-	avgPowerTotal = true,
 }
 
 
@@ -121,7 +117,25 @@ function db.addNewTariffPlanExceptionDate(aExceptionDateYmd, aDayType)
 		(exceptionDateYmd, dayType)
 		VALUES (?, ?)
 		ON CONFLICT DO UPDATE SET dayType = excluded.dayType
-	]], {aExceptionDate, aDayType}, "addNewTariffPlanExceptionDate")
+	]], {aExceptionDateYmd, aDayType}, "addNewTariffPlanExceptionDate")
+end
+
+
+
+
+
+--- Returns the next bucket to process for the specified aggregation table, if progress is saved.
+-- Returns nil if no progress is stored
+function db.aggregationProgress(aTableName)
+	assert(type(aTableName) == "string")
+
+	local rows = db.getArrayFromQuery([[
+		SELECT nextBucket
+		FROM aggr.AggregationProgress
+		WHERE tableName = ?
+	]], {aTableName}, "aggregationProgress")
+
+	return rows[1] and rows[1].nextBucket
 end
 
 
@@ -356,13 +370,12 @@ end
 
 --- Returns the start and end timestamps of the raw data in ElectricityConsumption table
 -- Returns nil if no data at all
-function db.getElectricityConsumptionDataRange()
+function db.electricityConsumptionDataRange()
 	local row = db.getArrayFromQuery([[
 		SELECT
-		MIN(timeStamp) as minTimeStamp,
-		MAX(timeStamp) as maxTimeStamp
-		FROM ElectricityConsumption
-	]], {}, "getElectricityConsumptionDataRange")
+			(SELECT timeStamp FROM ElectricityConsumption ORDER BY timeStamp ASC LIMIT 1) AS minTimeStamp,
+			(SELECT timeStamp FROM ElectricityConsumption ORDER BY timeStamp DESC LIMIT 1) AS maxTimeStamp;
+	]], {}, "electricityConsumptionDataRange")
 	if not(row and row[1]) then
 		return nil
 	end
@@ -498,6 +511,7 @@ end
 
 
 --- Returns the timestamp of the latest bucket missing from aTargetTable
+-- Returns nil if there's no bucket missing.
 -- Uses two-step query to simplify SQL and avoid SQLite CTE quirks
 function db.getLatestMissingAggregateBucket(aTargetTable, aIntervalSeconds)
 	assert(type(aTargetTable) == "string")
@@ -616,6 +630,7 @@ end
 
 
 
+--- Inserts a single aggregated datapoint in the specified aggregation table
 function db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
 	assert(type(aTableName) == "string")
 	assert(type(aTimeStamp) == "number")
@@ -623,19 +638,13 @@ function db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
 
 	db.execBoundStatement([[
 		INSERT OR REPLACE INTO aggr.]] .. aTableName .. [[ (
-			timeStamp,
-			avgPowerTotal, avgPowerA, avgPowerB, avgPowerC,
 			minPowerTotal, minPowerA, minPowerB, minPowerC,
 			maxPowerTotal, maxPowerA, maxPowerB, maxPowerC,
-			energyTotal, energyA, energyB, energyC
+			energyTotal, energyA, energyB, energyC,
+			timeStamp
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	]], {
-		aTimeStamp,
-		aAggregatedMeasurement.avgPowerTotal,
-		aAggregatedMeasurement.avgPowerA,
-		aAggregatedMeasurement.avgPowerB,
-		aAggregatedMeasurement.avgPowerC,
 		aAggregatedMeasurement.minPowerTotal,
 		aAggregatedMeasurement.minPowerA,
 		aAggregatedMeasurement.minPowerB,
@@ -648,7 +657,7 @@ function db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
 		aAggregatedMeasurement.energyA,
 		aAggregatedMeasurement.energyB,
 		aAggregatedMeasurement.energyC,
-		n = 17
+		aTimeStamp,
 	}, "insertAggregate." .. aTableName)
 end
 
@@ -714,6 +723,37 @@ function db.replaceTariffPlanSeasons(aSeasons)
 		checkSql(c, stmt:reset(), "replaceTariffPlanSeasons.reset")
 	end
 	checkSql(c, stmt:finalize(), "replaceTariffPlanSeasons.finalize")
+end
+
+
+
+
+
+--- Saves an aggregate and advances its progress cursor atomically
+-- aAggregatedMeasurement may be nil if the bucket contains no computable data
+function db.saveAggregateBucket(aTableName, aTimeStamp, aAggregatedMeasurement, aIntervalSeconds)
+	assert(type(aTableName) == "string")
+	assert(type(aTimeStamp) == "number")
+	assert((type(aAggregatedMeasurement) == "table") or (aAggregatedMeasurement == nil))
+	assert(type(aIntervalSeconds) == "number")
+
+	local c = ensureDb()
+	checkSql(c, c:exec("BEGIN TRANSACTION"), "saveAggregateBucket.begin")
+
+	local success, err = pcall(function()
+		if (aAggregatedMeasurement) then
+			db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
+		end
+
+		db.setAggregationProgress(aTableName, aTimeStamp - aIntervalSeconds)
+	end)
+
+	if not(success) then
+		c:exec("ROLLBACK")
+		error(err)
+	end
+
+	checkSql(c, c:exec("COMMIT"), "saveAggregateBucket.commit")
 end
 
 
@@ -882,6 +922,21 @@ function db.saveTariffPlanSeasons(aSeasons)
 		]], {season.startDateYmd, season.endDateYmd, season.workdayDayType, season.weekendDayType}, "saveTariffPlanSeasons.insert")
 	end
 	checkSql(c, c:exec("COMMIT TRANSACTION"), "saveTariffPlanSeasons.commit")
+end
+
+
+
+
+
+--- Sets the next bucket to process for an aggregation table
+function db.setAggregationProgress(aTableName, aNextBucket)
+	assert(type(aTableName) == "string")
+	assert((type(aNextBucket) == "number") or (aNextBucket == nil))
+
+	db.execBoundStatement([[
+		INSERT OR REPLACE INTO aggr.AggregationProgress (tableName, nextBucket)
+		VALUES (?, ?)
+	]], {aTableName, aNextBucket}, "setAggregationProgress")
 end
 
 

@@ -9,24 +9,45 @@ Assumes that the aggregator module exports a debug sub-table with the internal f
 
 
 local db = require("db")
+db.createSchema()
 local aggregator = require("aggregator")
+local perf = require("perf")
 
 
 
 
 
-local intervalSec = 15 * 60
-local tableName = "ElectricityConsumptionAggregate15min"
-local lmab = db.getLatestMissingAggregateBucket(tableName, intervalSec)
-print("LatestMissingAggregateBucket = " .. lmab)
+--- Test aggregating one historical bucket, same code as aggregator's aggregatorLoop() does:
+local intervalSeconds = 15 * 60
+local targetTable = "ElectricityConsumptionAggregate15min"
+local now = os.time()
+local currentBucket = now - now % intervalSeconds
+local timer = perf.newTimer("test-aggregator")
 
-local startTs, endTs = aggregator.debug.findNextAggregationBucket(tableName, intervalSec)
-assert(type(startTs) == "number")
-print("startTs = " .. startTs)
-print("endTs = " .. endTs)
+local startTs, endTs = aggregator.debug.findNextAggregationBucket(targetTable, intervalSeconds, currentBucket)
+timer("findNextAggregationBucket")
 
-local agg = aggregator.debug.calcAggregationForBucket(startTs, endTs)
-for k, v in pairs(agg) do
-	print(string.format("%s = %s", tostring(k), tostring(v)))
+if (startTs) then
+	print(string.format("Found bucket %d (%s)", startTs, os.date("!%Y-%m-%d %H:%M:%S", startTs)))
+	local agg = aggregator.debug.calcAggregationForBucket(startTs, endTs)
+	timer("calcAggregationForBucket")
+	db.saveAggregateBucket(targetTable, startTs, agg, intervalSeconds)
+	timer("saveAggregateBucket")
+	if (agg) then
+		print("Aggregated:")
+		for k, v in pairs(agg) do
+			print(string.format("\t%s = %s", tostring(k), tostring(v)))
+		end
+	else
+		print("No aggregated data")
+	end
+else
+	print("No unprocessed bucket found")
 end
+
+
+
+
+
+
 print("Finished.")

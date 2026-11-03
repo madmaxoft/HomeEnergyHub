@@ -16,7 +16,7 @@ db.createSchema()
 
 
 
-local rangeStart, rangeEnd = db.getElectricityConsumptionDataRange()
+local rangeStart, rangeEnd = db.electricityConsumptionDataRange()
 print("range: ", rangeStart, rangeEnd)
 print(os.date("!%Y-%m-%d", rangeStart), os.date("!%Y-%m-%d", rangeEnd))
 

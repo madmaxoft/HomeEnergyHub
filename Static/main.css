@@ -49,3 +49,20 @@ img.graph {
 .hasNoSchedule {
 	background-color: #ffffee;
 }
+
+
+
+
+
+/* Phase color-coding: */
+tr.phaseA {
+	color: #c00;
+}
+
+tr.phaseB {
+	color: #080;
+}
+
+tr.phaseC {
+	color: #00c;
+}

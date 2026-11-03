@@ -53,17 +53,17 @@ end
 		<th>Power (W)</th>
 		<th>Energy (kWh)</th>
 	</tr>
-	<tr>
+	<tr class="phaseA">
 		<th>Phase A</th>
 		<td class="power"><%= formatPower(latestMeasurement.powerA) %></td>
 		<td class="energy"><%= formatEnergy(latestMeasurement.energyA) %></td>
 	</tr>
-	<tr>
+	<tr class="phaseB">
 		<th>Phase B</th>
 		<td class="power"><%= formatPower(latestMeasurement.powerB) %></td>
 		<td class="energy"><%= formatEnergy(latestMeasurement.energyB) %></td>
 	</tr>
-	<tr>
+	<tr class="phaseC">
 		<th>Phase C</th>
 		<td class="power"><%= formatPower(latestMeasurement.powerC) %></td>
 		<td class="energy"><%= formatEnergy(latestMeasurement.energyC) %></td>

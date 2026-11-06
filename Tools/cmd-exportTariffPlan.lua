@@ -16,7 +16,6 @@ if not(arg[1]) then
 	error("No output file specified")
 end
 local f = assert(io.open(arg[1], "w"))
-db.createSchema()
 local tariffPlan = require("tariffPlan")
 f:write(tariffPlan.export())
 f:close()

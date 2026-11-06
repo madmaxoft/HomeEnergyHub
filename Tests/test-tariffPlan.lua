@@ -9,7 +9,6 @@ Implements a basic test for the tariffPlan module that runs in a single thread f
 
 
 local db = require("db")
-db.createSchema()
 local tariffPlan = require("tariffPlan")
 local utils = require("utils")
 

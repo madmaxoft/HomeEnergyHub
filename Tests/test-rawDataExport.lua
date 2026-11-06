@@ -10,7 +10,6 @@ The tests run in a single-threaded environment, easier for debugging.
 
 
 local db = require("db")
-db.createSchema()
 
 
 

@@ -24,7 +24,6 @@ if (f ~= io.stdin) then
 end
 
 -- Parse the plan data:
-db.createSchema()
 local tariffPlan = require("tariffPlan")
 local schedules, dayTypes, exceptionDates = assert(tariffPlan.parseFile(plan))
 tariffPlan.replace(schedules, dayTypes, exceptionDates)

@@ -73,7 +73,6 @@ local log = require("logger").log
 require("svgGraph")
 require("Templates")
 local db = require("db")
-db.createSchema()
 local router = require("router")
 local chintSensor = require("chintSensor")
 local aggregator = require("aggregator")

@@ -9,7 +9,6 @@ Assumes that the aggregator module exports a debug sub-table with the internal f
 
 
 local db = require("db")
-db.createSchema()
 local aggregator = require("aggregator")
 local perf = require("perf")
 

@@ -3,14 +3,16 @@
 
 local sqlite3 = require("lsqlite3")
 local perf = require("perf")
+local lldb = require("lowLevelDB")
+local dbUpgrade = require("dbUpgrade")
+local log = require("logger").log
 
 
 
 
 
 local db = {}
-local dbFile = "homeEnergyHub.sqlite"
-local conn = nil
+local gDB = nil
 
 
 
@@ -61,29 +63,20 @@ local gElectricityConsumptionAggregationValidColumnNames = {
 
 
 
---- Checks SQLite result codes and throws errors
-local function checkSql(aConn, aResult, aContext)
-	if (
-		(aResult ~= sqlite3.OK) and
-		(aResult ~= sqlite3.DONE) and
-		(aResult ~= sqlite3.ROW)
-	) then
-		error(string.format("SQLite error in %s: %s", aContext or "unknown", aConn:errmsg()))
-	end
-end
+--- Initializes the module, opens the DB, attaches secondary DB files
+local function initialize()
+	assert(gDB == nil)
 
+	gDB = sqlite3.open("homeEnergyHub.sqlite")
+	gDB:busy_timeout(1000)
+	lldb.checkSql(gDB, gDB:execute("PRAGMA foreign_keys = ON;"), "initialize.fkon")
+	lldb.checkSql(gDB, gDB:execute("ATTACH \"aggregated.sqlite\" as aggr"), "initialize.attach")
+	lldb.checkSql(gDB, gDB:execute("ATTACH \"userData.sqlite\" as UserData"), "initialize.attach")
 
+	-- Upgrade, if needed:
+	dbUpgrade.upgradeIfNeeded(gDB)
 
-
-
---- Ensures an open DB connection
-local function ensureDb()
-	if not(conn) then
-		conn = sqlite3.open(dbFile)
-		conn:busy_timeout(1000)
-		checkSql(conn, conn:execute("ATTACH \"aggregated.sqlite\" as aggr"), "ensureDb.attach")
-	end
-	return conn
+	log("db", "DB init done.")
 end
 
 
@@ -93,13 +86,13 @@ end
 --- Adds a new dayType with the all-day 100 % multiplier
 -- Returns the new dayType
 function db.addNewTariffPlanDayType(aDayType)
-	db.execBoundStatement([[
+	lldb.executeBoundSql(gDB, [[
 		INSERT INTO TariffPlanDayTypeSchedules
 		(dayType, startMinute, endMinute, multiplier)
 		SELECT COALESCE(MAX(dayType), -1) + 1, 0, 1440, 1
 		FROM TariffPlanDayTypeSchedules;
 	]], {}, "addTariffPlanDayType")
-	local res = db.getArrayFromQuery("SELECT MAX(dayType) as m FROM TariffPlanDayTypeSchedules", {}, "addNewTariffPlanDayType.getMax")
+	local res = lldb.arrayFromQuery(gDB, "SELECT MAX(dayType) as m FROM TariffPlanDayTypeSchedules", {}, "addNewTariffPlanDayType.getMax")
 	return res[1].m
 end
 
@@ -112,7 +105,7 @@ function db.addNewTariffPlanExceptionDate(aExceptionDateYmd, aDayType)
 	assert(type(aExceptionDateYmd) == "string")
 	assert(type(aDayType) == "number")
 
-	db.execBoundStatement([[
+	lldb.executeBoundSql(gDB, [[
 		INSERT INTO TariffPlanExceptionDates
 		(exceptionDateYmd, dayType)
 		VALUES (?, ?)
@@ -129,7 +122,7 @@ end
 function db.aggregationProgress(aTableName)
 	assert(type(aTableName) == "string")
 
-	local rows = db.getArrayFromQuery([[
+	local rows = lldb.arrayFromQuery(gDB, [[
 		SELECT nextBucket
 		FROM aggr.AggregationProgress
 		WHERE tableName = ?
@@ -142,86 +135,23 @@ end
 
 
 
+--- Returns an array-table of all config values, as {identifier = "", dbValue = ""} items
+-- Returns an empty array on empty DB.
+-- Returns nil and error message on error.
+function db.allConfigValues()
+	return lldb.arrayFromQuery(gDB, "SELECT * FROM UserData.Config", {}, "allConfigValues")
+end
+
+
+
+
+
 --- Closes the DB connection
 function db.close()
-	if (conn) then
-		conn:close()
-		conn = nil
+	if (gDB) then
+		gDB:close()
+		gDB = nil
 	end
-end
-
-
-
-
-
---- Ensures DB schema exists and upgrades if needed
-function db.createSchema()
-	db.close()
-	require("dbUpgrade").upgradeIfNeeded(dbFile)
-
-	ensureDb()
-end
-
-
-
-
-
---- Creates a backup of the DB file
--- Can only be called when the DB is closed, either before it is open for the first time, or after calling db.close()
-function db.backup()
-	assert(not(conn))  -- Is DB closed?
-
-	require("dbUpgrade").backupDbFile(dbFile)
-end
-
-
-
-
-
---- Executes the specified statement, binding the specified values to it.
--- aDescription is used for error logging.
-function db.execBoundStatement(aSql, aValuesToBind, aDescription)
-	local c = ensureDb()
-	local stmt = c:prepare(aSql)
-	if not(stmt) then
-		error("Failed to prepare statement (" .. aDescription .. "): " .. c:errmsg())
-	end
-	checkSql(c, stmt:bind_values(table.unpack(aValuesToBind, 1, aValuesToBind.n or #aValuesToBind)), aDescription .. ".bind")
-	checkSql(c, stmt:step(), aDescription .. ".step")
-	checkSql(c, stmt:finalize(), aDescription .. ".finalize")
-end
-
-
-
-
-
---- Runs the specified SQL query, binding the specified values to it, and returns the results as an array-table of dict-tables
--- aDescription is used for error logging.
-function db.getArrayFromQuery(aSql, aValuesToBind, aDescription)
-	assert(type(aSql) == "string")
-	assert(type(aValuesToBind) == "table" or not(aValuesToBind))
-	if not(aDescription) then
-		aDescription = debug.getinfo(1, 'S').source
-	end
-
-	local c = ensureDb()
-	local stmt = c:prepare(aSql)
-	if not(stmt) then
-		error("Failed to prepare statement (" .. aDescription .. "): " .. c:errmsg())
-	end
-	if ((aValuesToBind) and (aValuesToBind[1])) then
-		checkSql(c, stmt:bind_values(table.unpack(aValuesToBind)), aDescription .. ".bind")
-	end
-	local result = {}
-	local n = 0
-	for row in stmt:nrows() do
-		n = n + 1
-		result[n] = row
-	end
-	result.n = n
-	checkSql(c, stmt:finalize(), aDescription .. ".finalize")
-
-	return result
 end
 
 
@@ -274,10 +204,10 @@ function db.getBucketEnergyAndPower(aStartTs, aEndTs)
 		LIMIT 1
 	]]
 
-	local rowsBeforeStart = db.getArrayFromQuery(sqlBefore, {aStartTs}, "getBucketEnergyAndPower energy start before")
-	local rowsAfterStart  = db.getArrayFromQuery(sqlAfter,  {aStartTs}, "getBucketEnergyAndPower energy start after")
-	local rowsBeforeEnd   = db.getArrayFromQuery(sqlBefore, {aEndTs},   "getBucketEnergyAndPower energy end before")
-	local rowsAfterEnd    = db.getArrayFromQuery(sqlAfter,  {aEndTs},   "getBucketEnergyAndPower energy end after")
+	local rowsBeforeStart = lldb.arrayFromQuery(gDB, sqlBefore, {aStartTs}, "getBucketEnergyAndPower energy start before")
+	local rowsAfterStart  = lldb.arrayFromQuery(gDB, sqlAfter,  {aStartTs}, "getBucketEnergyAndPower energy start after")
+	local rowsBeforeEnd   = lldb.arrayFromQuery(gDB, sqlBefore, {aEndTs},   "getBucketEnergyAndPower energy end before")
+	local rowsAfterEnd    = lldb.arrayFromQuery(gDB, sqlAfter,  {aEndTs},   "getBucketEnergyAndPower energy end after")
 
 	local bStart = rowsBeforeStart[1]
 	local aStart = rowsAfterStart[1]
@@ -313,7 +243,7 @@ function db.getBucketEnergyAndPower(aStartTs, aEndTs)
 	end
 
 	-- Query power min/max (always safe):
-	local rows = db.getArrayFromQuery([[
+	local rows = lldb.arrayFromQuery(gDB, [[
 		SELECT
 			MIN(powerA)       AS minPowerA,
 			MAX(powerA)       AS maxPowerA,
@@ -350,7 +280,7 @@ function db.getElectricityConsumptionDailyStats(aFromTimeStamp, aToTimeStamp)
 	local res = {}
 	local n = 0
 	for dayTS = startDayTS, endDayTS, SECONDS_PER_DAY do
-		local row = db.getArrayFromQuery([[
+		local row = lldb.arrayFromQuery(gDB, [[
 			SELECT COUNT(*) AS cnt, SUM(timeStamp) as sumTs
 			FROM ElectricityConsumption
 			WHERE (timeStamp >= ?) AND (timeStamp < ?)
@@ -371,7 +301,7 @@ end
 --- Returns the start and end timestamps of the raw data in ElectricityConsumption table
 -- Returns nil if no data at all
 function db.electricityConsumptionDataRange()
-	local row = db.getArrayFromQuery([[
+	local row = lldb.arrayFromQuery(gDB, [[
 		SELECT
 			(SELECT timeStamp FROM ElectricityConsumption ORDER BY timeStamp ASC LIMIT 1) AS minTimeStamp,
 			(SELECT timeStamp FROM ElectricityConsumption ORDER BY timeStamp DESC LIMIT 1) AS maxTimeStamp;
@@ -391,7 +321,7 @@ function db.getElectricityConsumptionRawData(aStartTimeStamp, aEndTimeStamp)
 	assert(type(aStartTimeStamp) == "number")
 	assert(type(aEndTimeStamp) == "number")
 
-	return db.getArrayFromQuery([[
+	return lldb.arrayFromQuery(gDB, [[
 		SELECT * FROM ElectricityConsumption
 		WHERE (timeStamp >= ?) AND (timeStamp < ?)
 	]], {aStartTimeStamp, aEndTimeStamp}, "getElectricityConsumptionRawData")
@@ -401,7 +331,7 @@ end
 
 
 
---- Returns array-table or {timeStamp, value} in between the specified timestamps, for creating a power graph.
+--- Returns array-table of {timeStamp = ..., value = ...} in between the specified timestamps, for creating a power graph.
 -- The values are queries from a table represented by the aggregation parameter, from the specified column name
 -- Returns nil, errorMsg in case of bad parameters. Raises an error on DB errors.
 -- Adjusts aStartTs and aEndTs to include values just-before-start and just-after-end to account for
@@ -428,7 +358,7 @@ function db.getGraphPowerColumnData(aStartTs, aEndTs, aColumnName, aAggregationS
 	local startTs = aStartTs - (aStartTs % aAggregationSec)
 	local endTs = (aEndTs + aAggregationSec - 1) - ((aEndTs + aAggregationSec - 1) % aAggregationSec)
 
-	return db.getArrayFromQuery([[
+	return lldb.arrayFromQuery(gDB, [[
 		SELECT timeStamp, ]] .. aColumnName .. [[ as value
 		FROM ]] .. tableName .. [[
 		WHERE timeStamp >= ? AND timeStamp <= ?
@@ -439,49 +369,10 @@ end
 
 
 
---- Returns array-table with timeStamp, powerA, powerB, powerC and powerTotal in between the specified
--- timestamps, for creating a power graph.
--- A proper aggregation table is chosen to best represent the data in the graph
-function db.getGraphPowerData(aStartTs, aEndTs)
-	assert(type(aStartTs) == "number")
-	assert(type(aEndTs) == "number")
-	assert(aStartTs < aEndTs)
-
-	-- Choose aggregation table:
-	local aggTable, aggTableColumns
-	local interval = aEndTs - aStartTs
-	if (interval <= 10 * 60) then
-		aggTable = "ElectricityConsumption" -- raw 5s data
-		aggTableColumns = "powerA, powerB, powerC"
-	elseif (interval <= 24 * 60 * 60) then
-		aggTable = "ElectricityConsumptionAggregate1min"
-		aggTableColumns = "maxPowerA AS powerA, maxPowerB AS powerB, maxPowerC AS powerC, maxPowerTotal AS powerTotal"
-	elseif (interval <= 31 * 24 * 60 * 60) then
-		aggTable = "ElectricityConsumptionAggregate15min"
-		aggTableColumns = "avgPowerA AS powerA, avgPowerB AS powerB, avgPowerC AS powerC, avgPowerTotal AS powerTotal"
-	else
-		aggTable = "ElectricityConsumptionAggregateDay"
-		aggTableColumns = "avgPowerA AS powerA, avgPowerB AS powerB, avgPowerC AS powerC, avgPowerTotal AS powerTotal"
-	end
-
-	-- Query DB for the interval:
-	local sql = [[
-		SELECT timeStamp, ]] .. aggTableColumns .. [[
-		FROM ]] .. aggTable .. [[
-		WHERE timeStamp >= ? AND timeStamp <= ?
-		ORDER BY timeStamp ASC
-	]]
-	return db.getArrayFromQuery(sql, {aStartTs, aEndTs}, "getGraphPowerData")
-end
-
-
-
-
-
 --- Returns a single number representing the latest timestamp in the ElectricityConsumption table
 -- Returns nil if no data in the table
 function db.getLastElectricityConsumptionMeasurementTimestamp()
-	local res = db.getArrayFromQuery("SELECT MAX(timeStamp) as maxTimeStamp FROM ElectricityConsumption", {}, "getLastElectricityConsumptionMeasurementTimestamp")
+	local res = lldb.arrayFromQuery(gDB, "SELECT MAX(timeStamp) as maxTimeStamp FROM ElectricityConsumption", {}, "getLastElectricityConsumptionMeasurementTimestamp")
 	if (not(res) or (res.n ~= 1)) then
 		return nil
 	end
@@ -495,7 +386,7 @@ end
 --- Returns the latest DB row in the ElectricityConsumption table
 -- Returns nil if no data in the table
 function db.getLatestElectricityConsumptionMeasurement()
-	local res = db.getArrayFromQuery([[
+	local res = lldb.arrayFromQuery(gDB, [[
 		SELECT timeStamp, powerTotal, powerA, powerB, powerC, energyTotal, energyA, energyB, energyC
 		FROM ElectricityConsumption
 		ORDER BY timeStamp DESC LIMIT 1
@@ -510,65 +401,9 @@ end
 
 
 
---- Returns the timestamp of the latest bucket missing from aTargetTable
--- Returns nil if there's no bucket missing.
--- Uses two-step query to simplify SQL and avoid SQLite CTE quirks
-function db.getLatestMissingAggregateBucket(aTargetTable, aIntervalSeconds)
-	assert(type(aTargetTable) == "string")
-	assert(type(aIntervalSeconds) == "number")
-
-	-- Step 1: get min and max timestamps from raw table
-	local timer = perf.newTimer("db.getLatestMissingAggregateBucket")
-	local rows = db.getArrayFromQuery([[
-		SELECT MIN(timeStamp) AS minTs, MAX(timeStamp) AS maxTs
-		FROM ElectricityConsumption
-	]], {}, "getLatestMissingAggregateBucket min/max")
-	timer("getMinMax")
-
-	if (not(rows) or not(rows[1]) or not(rows[1].minTs)) then
-		return nil
-	end
-
-	-- Align to interval boundaries
-	local startTs = rows[1].minTs - rows[1].minTs % aIntervalSeconds
-	local endTs   = rows[1].maxTs - rows[1].maxTs % aIntervalSeconds
-	assert(endTs <= rows[1].maxTs)
-
-	-- Step 2: CTE to generate all aligned buckets and find the latest missing one
-	local sql = [[
-		WITH RECURSIVE buckets(ts) AS (
-			SELECT ? AS ts
-			UNION ALL
-			SELECT ts - ? FROM buckets WHERE ts >= ?
-		)
-		SELECT ts
-		FROM buckets b
-		LEFT JOIN ]] .. aTargetTable .. [[ a
-			ON a.timeStamp = b.ts
-		WHERE a.timeStamp IS NULL
-		ORDER BY ts DESC
-		LIMIT 1;
-	]]
-
-	local bind = { endTs - aIntervalSeconds, aIntervalSeconds, startTs }
-
-	local missingRows = db.getArrayFromQuery(sql, bind, "getLatestMissingAggregateBucket CTE")
-	timer("CTE")
-	if (missingRows and missingRows[1]) then
-		assert(missingRows[1].ts < endTs)
-		return missingRows[1].ts
-	end
-
-	return nil
-end
-
-
-
-
-
 --- Returns the tariff plan daytype schedules in an array-table
 function db.getTariffPlanDayTypeSchedules()
-	return db.getArrayFromQuery("SELECT * FROM TariffPlanDayTypeSchedules", {}, "getTariffPlanDayTypeSchedules")
+	return lldb.arrayFromQuery(gDB, "SELECT * FROM TariffPlanDayTypeSchedules", {}, "getTariffPlanDayTypeSchedules")
 end
 
 
@@ -577,7 +412,7 @@ end
 
 --- Returns the tariff plan exceptionDates in an array-table
 function db.getTariffPlanExceptionDates()
-	return db.getArrayFromQuery("SELECT * FROM TariffPlanExceptionDates", {}, "getTariffPlanExceptionDates")
+	return lldb.arrayFromQuery(gDB, "SELECT * FROM TariffPlanExceptionDates", {}, "getTariffPlanExceptionDates")
 end
 
 
@@ -586,7 +421,7 @@ end
 
 --- Returns the tariff plan seasons in an array-table
 function db.getTariffPlanSeasons()
-	return db.getArrayFromQuery("SELECT * FROM TariffPlanSeasons", {}, "getTariffPlanSeasons")
+	return lldb.arrayFromQuery(gDB, "SELECT * FROM TariffPlanSeasons", {}, "getTariffPlanSeasons")
 end
 
 
@@ -594,21 +429,21 @@ end
 
 
 function db.importElectricityConsumptionRows(aRows)
+	assert(gDB)
 	assert(type(aRows) == "table")
 
-	db.execBoundStatement("BEGIN TRANSACTION", {}, "importElectricityConsumption.begin")
-	local c = ensureDb()
-	local stmt = c:prepare([[
+	lldb.executeBoundSql(gDB, "BEGIN TRANSACTION", {}, "importElectricityConsumption.begin")
+	local stmt = gDB:prepare([[
 		INSERT OR IGNORE INTO ElectricityConsumption
 		(timeStamp, powerTotal, powerA, powerB, powerC, energyTotal, energyA, energyB, energyC)
 		VALUES
 		(?, ?, ?, ?, ?, ?, ?, ?, ?)
 	]])
 	if not(stmt) then
-		error("Failed to prepare statement (importElectricityConsumption): " .. c:errmsg())
+		error("Failed to prepare statement (importElectricityConsumption): " .. gDB:errmsg())
 	end
 	for _, row in ipairs(aRows) do
-		checkSql(c, stmt:bind_values(
+		lldb.checkSql(gDB, stmt:bind_values(
 			row.timeStamp,
 			row.powerTotal,
 			row.powerA,
@@ -619,11 +454,11 @@ function db.importElectricityConsumptionRows(aRows)
 			row.energyB,
 			row.energyC
 		), "importElectricityConsumption.bind")
-		checkSql(c, stmt:step(), "importElectricityConsumption.step")
-		checkSql(c, stmt:reset(), "importElectricityConsumption.reset")
+		lldb.checkSql(gDB, stmt:step(), "importElectricityConsumption.step")
+		lldb.checkSql(gDB, stmt:reset(), "importElectricityConsumption.reset")
 	end
-	checkSql(c, stmt:finalize(), "importElectricityConsumption.finalize")
-	db.execBoundStatement("COMMIT TRANSACTION", {}, "importElectricityConsumption.commit")
+	lldb.checkSql(gDB, stmt:finalize(), "importElectricityConsumption.finalize")
+	lldb.executeBoundSql(gDB, "COMMIT TRANSACTION", {}, "importElectricityConsumption.commit")
 end
 
 
@@ -632,11 +467,12 @@ end
 
 --- Inserts a single aggregated datapoint in the specified aggregation table
 function db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
+	assert(gDB)
 	assert(type(aTableName) == "string")
 	assert(type(aTimeStamp) == "number")
 	assert(type(aAggregatedMeasurement) == "table")
 
-	db.execBoundStatement([[
+	lldb.executeBoundSql(gDB, [[
 		INSERT OR REPLACE INTO aggr.]] .. aTableName .. [[ (
 			minPowerTotal, minPowerA, minPowerB, minPowerC,
 			maxPowerTotal, maxPowerA, maxPowerB, maxPowerC,
@@ -668,11 +504,12 @@ end
 --- Loads the energy usage in 15-minute intervals for the specified range
 -- The interval starts at aFromTimestamp - aNumDaysBack*days and ends with the day-end at aFromTimestamp
 function db.load15MinEnergyUsage(aFromTimestamp, aNumDaysBack)
+	assert(gDB)
 	assert(type(aFromTimestamp) == "number")
 	assert(type(aNumDaysBack) == "number")
 
 	local minTs = aFromTimestamp - aNumDaysBack * 24 * 60 * 60
-	return db.getArrayFromQuery([[
+	return lldb.arrayFromQuery(gDB, [[
 		SELECT timeStamp, energyTotal
 		FROM ElectricityConsumption
 		WHERE (((timeStamp % 900) = 0) AND (timeStamp >= ?) AND (timeStamp <= ?) AND (energyTotal IS NOT NULL))
@@ -686,9 +523,10 @@ end
 
 --- Removes the specified TariffPlan ExceptionDate
 function db.removeTariffPlanExceptionDate(aExceptionDateYmd)
+	assert(gDB)
 	assert(type(aExceptionDateYmd) == "string")
 
-	db.execBoundStatement([[
+	lldb.executeBoundSql(gDB, [[
 		DELETE FROM TariffPlanExceptionDates
 		WHERE exceptionDateYmd = ?
 	]], {aExceptionDate}, "removeTariffPlanExceptionDate")
@@ -700,29 +538,29 @@ end
 
 --- Replaces the TariffPlan schedules in the DB with the specified array-table
 function db.replaceTariffPlanSeasons(aSeasons)
+	assert(gDB)
 	assert(type(aSeasons) == "table")
 
-	db.execBoundStatement("DELETE FROM TariffPlanSeasons WHERE true", {}, "replaceTariffPlanSeasons.delAll")
-	local c = ensureDb()
-	local stmt = c:prepare([[
+	lldb.executeBoundSql(gDB, "DELETE FROM TariffPlanSeasons WHERE true", {}, "replaceTariffPlanSeasons.delAll")
+	local stmt = gDB:prepare([[
 		INSERT INTO TariffPlanSeasons
 		(startDateYmd, endDateYmd, workdayDayType, weekendDayType)
 		VALUES (?, ?, ?, ?)
 	]])
 	if not(stmt) then
-		error("Failed to prepare statement (replaceTariffPlanSeasons): " .. c:errmsg())
+		error("Failed to prepare statement (replaceTariffPlanSeasons): " .. gDB:errmsg())
 	end
 	for _, season in ipairs(aSeasons) do
-		checkSql(c, stmt:bind_values(
+		lldb.checkSql(gDB, stmt:bind_values(
 			season.startDateYmd,
 			season.endDateYmd,
 			season.workdayDayType,
 			season.weekendDayType
 		), "replaceTariffPlanSeasons.bind")
-		checkSql(c, stmt:step(), "replaceTariffPlanSeasons.step")
-		checkSql(c, stmt:reset(), "replaceTariffPlanSeasons.reset")
+		lldb.checkSql(gDB, stmt:step(), "replaceTariffPlanSeasons.step")
+		lldb.checkSql(gDB, stmt:reset(), "replaceTariffPlanSeasons.reset")
 	end
-	checkSql(c, stmt:finalize(), "replaceTariffPlanSeasons.finalize")
+	lldb.checkSql(gDB, stmt:finalize(), "replaceTariffPlanSeasons.finalize")
 end
 
 
@@ -732,13 +570,13 @@ end
 --- Saves an aggregate and advances its progress cursor atomically
 -- aAggregatedMeasurement may be nil if the bucket contains no computable data
 function db.saveAggregateBucket(aTableName, aTimeStamp, aAggregatedMeasurement, aIntervalSeconds)
+	assert(gDB)
 	assert(type(aTableName) == "string")
 	assert(type(aTimeStamp) == "number")
 	assert((type(aAggregatedMeasurement) == "table") or (aAggregatedMeasurement == nil))
 	assert(type(aIntervalSeconds) == "number")
 
-	local c = ensureDb()
-	checkSql(c, c:exec("BEGIN TRANSACTION"), "saveAggregateBucket.begin")
+	lldb.checkSql(gDB, gDB:exec("BEGIN TRANSACTION"), "saveAggregateBucket.begin")
 
 	local success, err = pcall(function()
 		if (aAggregatedMeasurement) then
@@ -749,11 +587,11 @@ function db.saveAggregateBucket(aTableName, aTimeStamp, aAggregatedMeasurement, 
 	end)
 
 	if not(success) then
-		c:exec("ROLLBACK")
+		gDB:exec("ROLLBACK")
 		error(err)
 	end
 
-	checkSql(c, c:exec("COMMIT"), "saveAggregateBucket.commit")
+	lldb.checkSql(gDB, gDB:exec("COMMIT"), "saveAggregateBucket.commit")
 end
 
 
@@ -762,31 +600,31 @@ end
 
 --- Replaces the TariffPlan dayTypes in the DB with the specified dict-table
 function db.replaceTariffPlanDayTypeSchedules(aDayTypeSchedules)
+	assert(gDB)
 	assert(type(aDayTypeSchedules) == "table")
 
-	db.execBoundStatement("DELETE FROM TariffPlanDayTypeSchedules WHERE true", {}, "replaceTariffPlanDayTypeSchedules.delAll")
-	local c = ensureDb()
-	local stmt = c:prepare([[
+	lldb.executeBoundSql(gDB, "DELETE FROM TariffPlanDayTypeSchedules WHERE true", {}, "replaceTariffPlanDayTypeSchedules.delAll")
+	local stmt = gDB:prepare([[
 		INSERT INTO TariffPlanDayTypeSchedules
 		(dayType, startMinute, endMinute, multiplier)
 		VALUES (?, ?, ?, ?)
 	]])
 	if not(stmt) then
-		error("Failed to prepare statement (replaceTariffPlanDayTypeSchedules): " .. c:errmsg())
+		error("Failed to prepare statement (replaceTariffPlanDayTypeSchedules): " .. gDB:errmsg())
 	end
 	for dayType, slots in pairs(aDayTypeSchedules) do
 		for _, slot in ipairs(slots) do
-			checkSql(c, stmt:bind_values(
+			lldb.checkSql(gDB, stmt:bind_values(
 				dayType,
 				slot.startMinute,
 				slot.endMinute,
 				slot.multiplier
 			), "replaceTariffPlanDayTypeSchedules.bind")
-			checkSql(c, stmt:step(), "replaceTariffPlanDayTypeSchedules.step")
-			checkSql(c, stmt:reset(), "replaceTariffPlanDayTypeSchedules.reset")
+			lldb.checkSql(gDB, stmt:step(), "replaceTariffPlanDayTypeSchedules.step")
+			lldb.checkSql(gDB, stmt:reset(), "replaceTariffPlanDayTypeSchedules.reset")
 		end
 	end
-	checkSql(c, stmt:finalize(), "replaceTariffPlanDayTypeSchedules.finalize")
+	lldb.checkSql(gDB, stmt:finalize(), "replaceTariffPlanDayTypeSchedules.finalize")
 end
 
 
@@ -797,25 +635,24 @@ end
 function db.replaceTariffPlanExceptionDates(aExceptionDates)
 	assert(type(aExceptionDates) == "table")
 
-	db.execBoundStatement("DELETE FROM TariffPlanExceptionDates WHERE true", {}, "replaceTariffPlanExceptionDates.delAll")
-	local c = ensureDb()
-	local stmt = c:prepare([[
+	lldb.executeBoundSql(gDB, "DELETE FROM TariffPlanExceptionDates WHERE true", {}, "replaceTariffPlanExceptionDates.delAll")
+	local stmt = gDB:prepare([[
 		INSERT INTO TariffPlanExceptionDates
 		(exceptionDateYmd, dayType)
 		VALUES (?, ?)
 	]])
 	if not(stmt) then
-		error("Failed to prepare statement (replaceTariffPlanExceptionDates): " .. c:errmsg())
+		error("Failed to prepare statement (replaceTariffPlanExceptionDates): " .. gDB:errmsg())
 	end
 	for excDateYmd, def in pairs(aExceptionDates) do
-		checkSql(c, stmt:bind_values(
+		lldb.checkSql(gDB, stmt:bind_values(
 			excDateYmd,
 			def.dayType
 		), "replaceTariffPlanExceptionDates.bind")
-		checkSql(c, stmt:step(), "replaceTariffPlanExceptionDates.step")
-		checkSql(c, stmt:reset(), "replaceTariffPlanExceptionDates.reset")
+		lldb.checkSql(gDB, stmt:step(), "replaceTariffPlanExceptionDates.step")
+		lldb.checkSql(gDB, stmt:reset(), "replaceTariffPlanExceptionDates.reset")
 	end
-	checkSql(c, stmt:finalize(), "replaceTariffPlanExceptionDates.finalize")
+	lldb.checkSql(gDB, stmt:finalize(), "replaceTariffPlanExceptionDates.finalize")
 end
 
 
@@ -827,18 +664,17 @@ end
 function db.saveMultipleElectricityMeasurements(aMeasurements)
 	assert(type(aMeasurements) == "table")
 
-	local c = ensureDb()
-	checkSql(c, c:exec("BEGIN TRANSACTION"), "saveMultipleElectricityMeasurements.begin")
-	local stmt = c:prepare([[
+	lldb.checkSql(gDB, gDB:exec("BEGIN TRANSACTION"), "saveMultipleElectricityMeasurements.begin")
+	local stmt = gDB:prepare([[
 		INSERT OR REPLACE INTO ElectricityConsumption (timeStamp, powerTotal, powerA, powerB, powerC, energyTotal, energyA, energyB, energyC)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	]])
 	if not(stmt) then
-		error("Failed to prepare the statement for inserting multiple electricity measurements: " .. c:errmsg())
+		error("Failed to prepare the statement for inserting multiple electricity measurements: " .. gDB:errmsg())
 	end
 	for _, measurement in ipairs(aMeasurements) do
 		assert(tonumber(measurement.timeStamp))
-		checkSql(c, stmt:bind_values(
+		lldb.checkSql(gDB, stmt:bind_values(
 			measurement.timeStamp,
 			measurement.powerTotal,
 			measurement.powerA,
@@ -849,11 +685,11 @@ function db.saveMultipleElectricityMeasurements(aMeasurements)
 			measurement.energyB,
 			measurement.energyC
 		), "saveMultipleElectricityMeasurements.bind")
-		checkSql(c, stmt:step(), "saveMultipleElectricityMeasurements.step")
-		checkSql(c, stmt:reset(), "saveMultipleElectricityMeasurements.reset")
+		lldb.checkSql(gDB, stmt:step(), "saveMultipleElectricityMeasurements.step")
+		lldb.checkSql(gDB, stmt:reset(), "saveMultipleElectricityMeasurements.reset")
 	end
-	checkSql(c, stmt:finalize(), "saveMultipleElectricityMeasurements.finalize")
-	checkSql(c, c:exec("COMMIT TRANSACTION"), "saveMultipleElectricityMeasurements.commit")
+	lldb.checkSql(gDB, stmt:finalize(), "saveMultipleElectricityMeasurements.finalize")
+	lldb.checkSql(gDB, gDB:exec("COMMIT TRANSACTION"), "saveMultipleElectricityMeasurements.commit")
 end
 
 
@@ -865,7 +701,7 @@ end
 function db.saveSingleElectricityMeasurement(aTimeStamp, aMeasurement)
 	assert(tonumber(aTimeStamp))
 
-	db.execBoundStatement([[
+	lldb.executeBoundSql(gDB, [[
 		INSERT OR REPLACE INTO ElectricityConsumption (timeStamp, powerTotal, powerA, powerB, powerC, energyTotal, energyA, energyB, energyC)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	]], {
@@ -892,16 +728,15 @@ function db.saveTariffPlanDayTypeSchedule(aDayType, aSchedule)
 	assert(type(aSchedule) == "table")
 	assert(type(aSchedule[1]) == "table")
 
-	local c = ensureDb()
-	checkSql(c, c:exec("BEGIN TRANSACTION"), "saveTariffPlanDayTypeSchedule.begin")
-	db.execBoundStatement("DELETE FROM TariffPlanDayTypeSchedules WHERE dayType = ?", {aDayType}, "saveTariffPlanDayTypeSchedule.delete")
+	lldb.checkSql(gDB, gDB:exec("BEGIN TRANSACTION"), "saveTariffPlanDayTypeSchedule.begin")
+	lldb.executeBoundSql(gDB, "DELETE FROM TariffPlanDayTypeSchedules WHERE dayType = ?", {aDayType}, "saveTariffPlanDayTypeSchedule.delete")
 	for _, slot in ipairs(aSchedule) do
-		db.execBoundStatement([[
+		lldb.executeBoundSql(gDB, [[
 			INSERT INTO TariffPlanDayTypeSchedules (dayType, startMinute, endMinute, multiplier)
 			VALUES (?, ?, ?, ?)
 		]], {aDayType, slot.startMinute, slot.endMinute, slot.multiplier}, "saveTariffPlanDayTypeSchedule.insert")
 	end
-	checkSql(c, c:exec("COMMIT TRANSACTION"), "saveTariffPlanDayTypeSchedule.commit")
+	lldb.checkSql(gDB, gDB:exec("COMMIT TRANSACTION"), "saveTariffPlanDayTypeSchedule.commit")
 end
 
 
@@ -912,16 +747,15 @@ function db.saveTariffPlanSeasons(aSeasons)
 	assert(type(aSeasons) == "table")
 	assert(type(aSeasons.n) == "number")
 
-	local c = ensureDb()
-	checkSql(c, c:exec("BEGIN TRANSACTION"), "saveTariffPlanSeasons.begin")
-	db.execBoundStatement("DELETE FROM TariffPlanSeasons WHERE TRUE", {}, "saveTariffPlanSeasons.delete")
+	lldb.checkSql(gDB, gDB:exec("BEGIN TRANSACTION"), "saveTariffPlanSeasons.begin")
+	lldb.executeBoundSql(gDB, "DELETE FROM TariffPlanSeasons WHERE TRUE", {}, "saveTariffPlanSeasons.delete")
 	for _, season in ipairs(aSeasons) do
-		db.execBoundStatement([[
+		lldb.executeBoundSql(gDB, [[
 			INSERT INTO TariffPlanSeasons (startDateYmd, endDateYmd, workdayDayType, weekendDayType)
 			VALUES (?, ?, ?, ?)
 		]], {season.startDateYmd, season.endDateYmd, season.workdayDayType, season.weekendDayType}, "saveTariffPlanSeasons.insert")
 	end
-	checkSql(c, c:exec("COMMIT TRANSACTION"), "saveTariffPlanSeasons.commit")
+	lldb.checkSql(gDB, gDB:exec("COMMIT TRANSACTION"), "saveTariffPlanSeasons.commit")
 end
 
 
@@ -933,7 +767,7 @@ function db.setAggregationProgress(aTableName, aNextBucket)
 	assert(type(aTableName) == "string")
 	assert((type(aNextBucket) == "number") or (aNextBucket == nil))
 
-	db.execBoundStatement([[
+	lldb.executeBoundSql(gDB, [[
 		INSERT OR REPLACE INTO aggr.AggregationProgress (tableName, nextBucket)
 		VALUES (?, ?)
 	]], {aTableName, aNextBucket}, "setAggregationProgress")
@@ -943,4 +777,5 @@ end
 
 
 
+initialize()
 return db

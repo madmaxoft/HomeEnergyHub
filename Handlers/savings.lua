@@ -11,8 +11,6 @@ Accepts parameters:
 
 
 
-local httpRequest = require("httpRequest")
-local httpResponse = require("httpResponse")
 local db = require("db")
 local tariffPlan = require("tariffPlan")
 
@@ -130,9 +128,9 @@ end
 
 
 
-function M.get(aClient, aPath, aRequestHeaders)
+function M.get(aRequest, aResponse)
 	-- Parse path and query:
-	local path, query = httpRequest.parseRequestPath(aPath)
+	local path, query = aRequest:parsedPathAndQuery()
 	local from = tonumber(query.from) or os.time()
 	local numDays = tonumber(query.numdays) or 31
 	from = from - (from % SECONDS_PER_DAY)
@@ -142,14 +140,12 @@ function M.get(aClient, aPath, aRequestHeaders)
 	local dailyUsage = M.collectDailyUsage(from, numDays, rawEnergyUsage)
 	M.applyTariffPlan(dailyUsage, rawEnergyUsage)
 
-	local body = require("Templates").savings({
+	aResponse:sendTemplate("savings", {
 		currentTime = os.time(),
 		from = from,
 		numDays = numDays,
 		dailyUsage = dailyUsage,
 	})
-	httpResponse.send(aClient, "200 OK", nil, body)
-
 end
 
 

@@ -12,8 +12,6 @@ stored as a state in this module and modified by various HTTP endpoints.
 
 
 local db = require("db")
-local httpRequest = require("httpRequest")
-local httpResponse = require("httpResponse")
 local multipart = require("multipart")
 local utils = require("utils")
 local copas = require("copas")
@@ -248,46 +246,45 @@ end
 
 
 
-function M.getRemoteImport(aClient, aPath, aRequestHeaders)
-	return httpResponse.send(aClient, 200, nil, require("Templates").remoteImport(M))
+function M.getRemoteImport(aRequest, aResponse)
+	return aResponse:sendTemplate("remoteImport", M)
 end
 
 
 
 
 
-function M.postCancel(aClient, aPath, aRequestHeaders)
+function M.postCancel(aRequest, aResponse)
 	M.shouldCancel = true
-	return httpResponse.sendRedirect(aClient, "/remoteImport")
+	return aResponse:sendRedirect("/remoteImport")
 end
 
 
 
 
 
-function M.postStart(aClient, aPath, aRequestHeaders)
+function M.postStart(aRequest, aResponse)
 	-- Do not allow running multiple instances:
 	if (M.isRunning) then
-		return httpResponse.sendError(aClient, 400, "An import is already running.")
+		return aResponse:sendError(400, "An import is already running.")
 	end
 
 	-- Parse the inputs:
-	local body = httpRequest.readBody(aClient, aRequestHeaders)
-	local m = multipart(body, aRequestHeaders["content-type"])
-	local remoteAddress = (m:get("remoteAddress") or {}).value
+	local m = aRequest:formData()
+	local remoteAddress = (m or {}).remoteAddress
 	if not(remoteAddress) then
-		return httpResponse.sendError(aClient, 400, "Missing the 'remoteAddress' field.")
+		return aResponse:sendError(400, "Missing the 'remoteAddress' field.")
 	end
 	if (remoteAddress == "") then
-		return httpResponse.sendError(aClient, 400, "The 'remoteAddress' field is empty.")
+		return aResponse:sendError(400, "The 'remoteAddress' field is empty.")
 	end
 
 	-- Start the import:
 	M.remoteAddress = remoteAddress
 	log("remoteImport", "Importing from %s", M.remoteAddress)
+	copas.addnamedthread("remoteImport", M.runImport)
 
-	copas.addthread(M.runImport)
-	return httpResponse.sendRedirect(aClient, "/remoteImport")
+	return aResponse:sendRedirect("/remoteImport")
 end
 
 

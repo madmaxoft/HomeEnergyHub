@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Configuration - Home Energy Hub</title>
+	<link rel="stylesheet" href="/Static/main.css" />
+</head>
+<body>
+<%- utils.include("header") %>
+<h1>Configuration</h1>
+
+<%
+table.sort(config,
+	function (aConfig1, aConfig2)
+		return (aConfig1.identifier < aConfig2.identifier)
+	end
+)
+
+%>
+
+<% if not(request.isReadOnly) then %>
+
+<table class="config-table" width="100%">
+	<tr>
+		<th>Identifier</th>
+		<th>Value</th>
+		<th>Action</th>
+	</tr>
+
+	<% for _, item in ipairs(config) do %>
+		<%- utils.include("configEditorItem", { item = item }) %>
+	<% end %>
+
+</table>
+
+<% end %>
+
+</body>
+</html>

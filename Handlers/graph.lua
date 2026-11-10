@@ -24,8 +24,6 @@ Data series aggregation can be:
 
 
 
-local httpRequest = require("httpRequest")
-local httpResponse = require("httpResponse")
 local db = require("db")
 local svgGraph = require("svgGraph")
 
@@ -77,19 +75,19 @@ end
 
 
 
-return function (aClient, aPath, aRequestHeaders)
+return function (aRequest, aResponse)
 	-- Parse path and query:
-	local path, query = httpRequest.parseRequestPath(aPath)
+	local path, query = aRequest:parsedPathAndQuery()
 	local fromParam = query.from or "now"
 	local interval = tonumber(query.interval)
 	if not(interval) then
-		return httpResponse.sendError(aClient, 400, "Missing 'interval' parameter")
+		return aResponse:sendError(400, "Missing 'interval' parameter")
 	end
 	local width = query.width or 1500
 	local height = query.height or 500
 	local def = query.def
 	if not(def) then
-		return httpResponse.sendError(aClient, 400, "Missing 'def' parameter")
+		return aResponse:sendError(400, "Missing 'def' parameter")
 	end
 	query.background = query.background or "grid"
 	query.axislabels = query.axislabels or "values"
@@ -101,7 +99,7 @@ return function (aClient, aPath, aRequestHeaders)
 	else
 		endTs = tonumber(fromParam)
 		if not(endTs) then
-			return httpResponse.sendError(aClient, 400, "Invalid 'from' parameter")
+			return aResponse:sendError(400, "Invalid 'from' parameter")
 		end
 	end
 	local startTs = endTs - interval
@@ -116,14 +114,14 @@ return function (aClient, aPath, aRequestHeaders)
 		aggr = tonumber(aggr)
 		color = color or "000000"
 		if (not(columnName) or not(aggr)) then
-			return httpResponse.sendError(aClient, 400, "Invalid series definition " .. seriesDef)
+			return aResponse:sendError(400, "Invalid series definition " .. seriesDef)
 		end
 		if not(gValidAggregations[aggr]) then
-			return httpResponse.sendError(aClient, 400, "Invalid aggregation value: " .. aggr)
+			return aResponse:sendError(400, "Invalid aggregation value: " .. aggr)
 		end
 		local rows, msg = db.getGraphPowerColumnData(startTs, endTs, columnName, aggr)
 		if not(rows) then
-			return httpResponse.sendError(aClient, 400, "Cannot query from DB: " .. tostring(msg))
+			return aResponse:sendError(400, "Cannot query from DB: " .. tostring(msg))
 		end
 		local s, m = convertDbRowsToSeries(startTs, endTs, rows, aggr)
 		if (s) then
@@ -154,5 +152,5 @@ return function (aClient, aPath, aRequestHeaders)
 
 	-- Send the resulting SVG data to the client:
 	local svgString = graph:finish()
-	httpResponse.send(aClient, 200, { ["Content-Type"] = "image/svg+xml" }, svgString)
+	aResponse:sendRawDataWithLength(svgString, "image/svg+xml")
 end

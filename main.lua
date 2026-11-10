@@ -76,20 +76,86 @@ local db = require("db")
 local router = require("router")
 local chintSensor = require("chintSensor")
 local aggregator = require("aggregator")
+local config = require("config")
+local requestTracker = require("requestTracker")
+local httpRequest = require("httpRequest")
+local httpResponse = require("httpResponse")
 
 
 
 
 
---- Starts the Copas HTTP server on port 5500
+config.registerDefinitions(
+{
+	{
+		identifier = "http.port",
+		description = "The port on which the main app HTTP server listens on. Must be free on the local system.",
+		category = "HTTP",
+		valueType = "number",
+		default = 5500,
+		validator = function(aValue)
+			aValue = tonumber(aValue)
+			if not(aValue) then
+				return nil, "Not a number"
+			end
+			if ((aValue < 0) or (aValue > 65535)) then
+				return nil, "Out of range; valid range is 0 - 65536."
+			end
+			return true
+		end,
+		isRestartRequired = true,
+	},
+})
+config.loadAll()
+
+
+
+
+
+--- Handles a single connected client, possibly with keep-alive:
+local function clientLoop(aSocket)
+	copas.mainServerClients = copas.mainServerClients or {}
+	copas.mainServerClients[aSocket] = true
+	while true do
+		local req, err = httpRequest.createFromSocket(aSocket)
+		if not req then
+			break
+		end
+		requestTracker.beginRequest()
+		local resp = httpResponse.new(req)
+		router.handleRequest(req, resp)
+		resp:finish()
+		req:discardUnreadBody()
+		requestTracker.endRequest()
+		if not(req:shouldKeepAlive(resp)) then
+			break
+		end
+	end
+	copas.mainServerClients[aSocket] = false
+	aSocket:close()
+end
+
+
+
+
+
+--- Starts the Copas HTTP server
 local function startServer()
-	local serverSocket = assert(socket.bind("*", 5500))
-	log("main", "Server listening on http://localhost:5500/")
+	local port = config.get("http.port")
+	local serverSocket = assert(socket.bind("*", port))
+	log("main", "Server running on http://localhost:" .. port .. "/")
 
-	copas.mainServer = serverSocket
-	copas.addserver(serverSocket, function(aSocket)
-		router.handleRequest(copas.wrap(aSocket))
-	end)
+	copas.mainServerSocket = serverSocket
+	copas.addserver(serverSocket,
+		function(aSocket)
+			clientLoop(copas.wrap(aSocket))
+		end,
+		nil,
+		"mainServerSocket"
+	)
+
+	copas.loop()
+	log("main", "Server loop terminated.")
 end
 
 
@@ -110,7 +176,5 @@ log("main", "Starting up...")
 startSensors()
 aggregator.start()
 startServer()
-
-copas.loop()
 
 log("main", "Finished.")

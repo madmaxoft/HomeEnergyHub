@@ -16,8 +16,6 @@ in the returned table.
 
 
 local db = require("db")
-local httpRequest = require("httpRequest")
-local httpResponse = require("httpResponse")
 local utils = require("utils")
 local perf = require("perf")
 
@@ -32,9 +30,9 @@ local M = {}
 
 
 --- Returns two timestamps, each on a separate line, specifying the start and end of raw data in the DB
-function M.getAvailableRange(aClient, aPath, aRequestHeaders)
+function M.getAvailableRange(aRequest, aResponse)
 	local startTimeStamp, endTimeStamp = db.electricityConsumptionDataRange()
-	return httpResponse.send(aClient, 200, "text/plain", string.format("%d\n%d\n", startTimeStamp, endTimeStamp))
+	return aResponse:sendPlainText(string.format("%d\n%d\n", startTimeStamp, endTimeStamp))
 end
 
 
@@ -43,13 +41,13 @@ end
 
 --- Returns a list of days within the specified interval with their stats (num records, timestamp sum as a hash)
 -- The interval is specified in fromTimeStamp and toTimeStamp parameters and is max 366 days long
-function M.getDailyStats(aClient, aPath, aRequestHeaders)
+function M.getDailyStats(aRequest, aResponse)
 	-- Parse query parameters:
-	local path, query = httpRequest.parseRequestPath(aPath)
+	local path, query = aRequest:parsedPathAndQuery()
 	local fromTimeStamp = tonumber(query.fromTimeStamp)
 	local toTimeStamp = tonumber(query.toTimeStamp)
 	if not(fromTimeStamp and toTimeStamp) then
-		return httpResponse.sendError(aClient, 400, "Missing 'fromTimeStamp' or 'toTimeStamp' parameter")
+		return aResponse:sendError(400, "Missing 'fromTimeStamp' or 'toTimeStamp' parameter")
 	end
 
 	-- Check parameters:
@@ -57,7 +55,7 @@ function M.getDailyStats(aClient, aPath, aRequestHeaders)
 		toTimeStamp, fromTimeStamp = fromTimeStamp, toTimeStamp
 	end
 	if (toTimeStamp - fromTimeStamp > 366 * 24 * 60 * 60) then
-		return httpResponse.sendError(aClient, 400, "Interval too large")
+		return aResponse:sendError(aClient, 400, "Interval too large")
 	end
 
 	local dayStats = db.getElectricityConsumptionDailyStats(fromTimeStamp, toTimeStamp)
@@ -65,10 +63,10 @@ function M.getDailyStats(aClient, aPath, aRequestHeaders)
 	for idx, day in ipairs(dayStats) do
 		body[idx] = string.format(
 			"{timeStamp = %d, count = %d, sum = %d},",
-			day.timeStamp, day.count, day.sum or 0
+			day.timeStamp, day.count or 0, day.sum or 0
 		)
 	end
-	return httpResponse.send(aClient, 200, "text/lua", "{" .. table.concat(body) .. "}")
+	return aResponse:sendRawDataWithLength("{" .. table.concat(body) .. "}", "text/lua")
 end
 
 
@@ -77,14 +75,14 @@ end
 
 --- Returns the raw data for the specified interval, as a Lua array-table of dict-tables
 -- The interval is specified in fromTimeStamp and toTimeStamp parameters and is max 25 hours long
-function M.getRawData(aClient, aPath, aRequestHeaders)
+function M.getRawData(aRequest, aResponse)
 	-- Parse query parameters:
 	local timer = perf.newTimer("rawDataExport.getRawData")
-	local path, query = httpRequest.parseRequestPath(aPath)
+	local path, query = aRequest:parsedPathAndQuery()
 	local fromTimeStamp = tonumber(query.fromTimeStamp)
 	local toTimeStamp = tonumber(query.toTimeStamp)
 	if not(fromTimeStamp and toTimeStamp) then
-		return httpResponse.sendError(aClient, 400, "Missing 'fromTimeStamp' or 'toTimeStamp' parameter")
+		return aResponse:sendError(400, "Missing 'fromTimeStamp' or 'toTimeStamp' parameter")
 	end
 
 	-- Check parameters:
@@ -92,7 +90,7 @@ function M.getRawData(aClient, aPath, aRequestHeaders)
 		toTimeStamp, fromTimeStamp = fromTimeStamp, toTimeStamp
 	end
 	if (toTimeStamp - fromTimeStamp > 366 * 24 * 60 * 60) then
-		return httpResponse.sendError(aClient, 400, "Interval too large")
+		return aResponse:sendError(400, "Interval too large")
 	end
 
 	local rawData = db.getElectricityConsumptionRawData(fromTimeStamp, toTimeStamp)
@@ -115,7 +113,7 @@ function M.getRawData(aClient, aPath, aRequestHeaders)
 	timer("serializeRows")
 	body = "{" .. table.concat(body) .. "}"
 	timer("serializeBody")
-	return httpResponse.send(aClient, 200, "text/lua", body)
+	return aResponse:sendRawDataWithLength(body, "text/lua")
 end
 
 

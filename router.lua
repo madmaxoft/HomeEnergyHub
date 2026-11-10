@@ -1,19 +1,28 @@
 -- router.lua
 
 --[[
-Implements the HTTP server's routing table.
-The routes are listed statically in the table below
-Route handlers live in the Handlers subfolder.
+Implements the HTTP server's routing table processor. The route table, provided externally, specifies
+the handlers to use for the HTTP methods and paths.
+By default loads the route table from require("routeTable")
+Usage:
+	local router = require("router")
+	local req = httpRequest.createFromSocket(socket)
+	local resp = httpResponse.new(req)
+	router.handleRequest(req, resp)
+	resp:finish()
+	req:discardUnreadBody()
 --]]
 
 
 
 
-
-local httpResponse = require("httpResponse")
+local copas = require("copas")
 local httpRequest = require("httpRequest")
+local httpResponse = require("httpResponse")
 local socket = require("socket")
 local log = require("logger").log
+local config = require("config")
+local mime = require("mime")
 
 
 
@@ -25,66 +34,125 @@ local router = {}
 
 
 
---- Static routes:
--- NOTE: The matcher goes from top to bottom and uses the first substring match,
--- so the more generic URLs need to go at the bottom
-router.routes = {
-	GET =
+config.registerDefinitions({
 	{
-		{ path = "/static/",                            handler = require("Handlers.static") },
-		{ path = "/Static/",                            handler = require("Handlers.static") },
-		{ path = "/favicon",                            handler = require("Handlers.favicon") },
-		{ path = "/graph?",                             handler = require("Handlers.graph") },
-		{ path = "/rawDataExport/availableRange",       handler = require("Handlers.rawDataExport").getAvailableRange },
-		{ path = "/rawDataExport/dailyStats",           handler = require("Handlers.rawDataExport").getDailyStats },
-		{ path = "/rawDataExport/rawData",              handler = require("Handlers.rawDataExport").getRawData },
-		{ path = "/remoteImport",                       handler = require("Handlers.remoteImport").getRemoteImport },
-		{ path = "/savings?",                           handler = require("Handlers.savings").get },
-		{ path = "/tariffPlan/dayTypeGraph?",           handler = require("Handlers.tariffPlanUI").getDayTypeGraph },
-		{ path = "/tariffPlan/editDayType/",            handler = require("Handlers.tariffPlanUI").getEditDayType },
-		{ path = "/tariffPlan/export",                  handler = require("Handlers.tariffPlanUI").getExport },
-		{ path = "/tariffPlan/import",                  handler = require("Handlers.tariffPlanUI").getImport },
-		{ path = "/tariffPlan",                         handler = require("Handlers.tariffPlanUI").getTariffPlan },
-		{ path = "/",                                   handler = require("Handlers.home") },
+		identifier = "http.auth.full.username",
+		description = "The username that is allowed full access to the site. Empty means no auth is required.",
+		category = "HTTP",
+		valueType = "string",
+		default = "",
 	},
-	POST =
 	{
-		{ path = "/remoteImport/start",                 handler = require("Handlers.remoteImport").postStart },
-		{ path = "/remoteImport/cancel",                handler = require("Handlers.remoteImport").postCancel },
-		{ path = "/tariffPlan/addNewDayType",           handler = require("Handlers.tariffPlanUI").postAddNewDayType },
-		{ path = "/tariffPlan/addNewExceptionDate",     handler = require("Handlers.tariffPlanUI").postAddNewExceptionDate },
-		{ path = "/tariffPlan/addNewSeason",            handler = require("Handlers.tariffPlanUI").postAddNewSeason },
-		{ path = "/tariffPlan/editDayType/addNewSlot",  handler = require("Handlers.tariffPlanUI").postAddNewDayTypeSlot },
-		{ path = "/tariffPlan/import",                  handler = require("Handlers.tariffPlanUI").postImport },
-		{ path = "/tariffPlan/removeExceptionDate",     handler = require("Handlers.tariffPlanUI").postRemoveExceptionDate },
+		identifier = "http.auth.full.password",
+		description = "The password tied to the username. Ignored when username is empty.",
+		category = "HTTP",
+		valueType = "string",
+		isSecret = true,
+		default = "",
 	},
-}
+	{
+		identifier = "http.auth.realm",
+		description = "The realm (server name) used for asking the user for their login. Ignored when the full username is empty.",
+		category = "HTTP",
+		valueType = "string",
+		default = "AniDbXref",
+	},
+	{
+		identifier = "http.auth.readonly.username",
+		description = "The username that is allowed access to the site in a ReadOnly mode. Empty means no auth is required. Ignored when main username is empty.",
+		category = "HTTP",
+		valueType = "string",
+		default = "",
+	},
+	{
+		identifier = "http.auth.readonly.password",
+		description = "The password tied to the ReadOnly username. Ignored when ReadOnly username is empty.",
+		category = "HTTP",
+		valueType = "string",
+		isSecret = true,
+		default = "",
+	},
+})
+
+
+
+
+
+-- Define static routes:
+router.routes = require("routeTable")
+
+
+
+
+
+--- Evaluates the request's auth status - auth OK, ReadOnly or Denied
+-- Returns true if auth succeeded (OK or ReadOnly)
+-- ReadOnly is marked into the request table as an isReadOnly property
+local function evaluateAuth(aRequest)
+	assert(aRequest)
+	assert(aRequest.header)  -- Is it an HttpRequest object?
+
+	local expUsername = config.get("http.auth.full.username")
+	local authHeader = aRequest:header("authorization")
+	if (expUsername == "") then
+		-- No auth is needed
+		return true
+	end
+
+	-- Check full auth:
+	local expPassword = config.get("http.auth.full.password")
+	if not(authHeader) then
+		log("router.auth", "Auth header not received (request path \"%s\", UA \"%s\")",
+			aRequest:pathAndQuery(),
+			tostring(aRequest:header("user-agent"))
+		)
+		return false
+	end
+	local expAuthStr = "Basic " .. mime.b64(expUsername .. ":" .. expPassword)
+	if (expAuthStr == authHeader) then
+		return true
+	end
+
+	local roUsername = config.get("http.auth.readonly.username")
+	if (roUsername ~= "") then
+		local roPassword = config.get("http.auth.readonly.password")
+		local expAuthStr = "Basic " .. mime.b64(roUsername .. ":" .. roPassword)
+		if (expAuthStr == authHeader) then
+			aRequest.isReadOnly = true
+			return true
+		end
+	end
+	log("router.auth", "Auth failed")
+	return false
+end
 
 
 
 
 
 --- Calls the specified handler safely - if an error is raised, an error page is served
-function router.dispatchHandler(aClient, aPath, aHeaders, aHandler)
-	assert(type(aPath) == "string")
-	assert(type(aHeaders) == "table")
+function router.dispatchHandler(aHandler, aRequest, aResponse)
 	assert(type(aHandler) == "function")
+	assert(aRequest)
+	assert(aRequest.httpVersion)
+	assert(aResponse)
+	assert(aResponse.setHeader)
 
-	-- Error handler that adds traceback
+	-- error handler that adds traceback
 	local function onError(aErr)
 		return debug.traceback(aErr, 2)
 	end
 
 	-- run handler safely
-	local isOK, result = xpcall(function()
-		return aHandler(aClient, aPath, aHeaders)
+	local ok, result = xpcall(function()
+		return aHandler(aRequest, aResponse)
 	end, onError)
 
-	-- if an exception occurred
-	if not(isOK) then
+	-- If an exception occurred, log and send it to the client:
+	if not(ok) then
 		local errText = result or "Unknown error"
-		log("router", "ERROR during request:\n" .. errText)
-		httpResponse.sendError(aClient, 500, errText)
+		log("router", "ERROR during request: %s", errText)
+		aResponse:sendError(500, errText)
 	end
 end
 
@@ -93,24 +161,30 @@ end
 
 
 --- Handles a single HTTP client connection
-function router.handleRequest(aClient)
-	local method, path, headers = httpRequest.readRequestHeaders(aClient)
-	if (not(method) or not(path)) then
-		return
+function router.handleRequest(aRequest, aResponse)
+	assert(aRequest)
+	assert(aRequest.httpVersion)  -- Is it an HttpRequest object?
+	assert(aResponse)
+	assert(aResponse.setHeader)  -- Is it an HttpResponse object?
+
+	-- Check auth, if configured:
+	if not(evaluateAuth(aRequest)) then
+		return aResponse:sendUnauthorized(config.get("http.auth.realm"))
 	end
 
-	local handler = router.findHandler(method, path)
+	-- Process the request:
+	local handler = router.match(aRequest)
 	if (handler) then
 		local beginTime = socket.gettime()
-		log("main", "%s Request for path \"%s\".", method, path)
-		router.dispatchHandler(aClient, path, headers, handler)
+		log("router", "%s Request for path \"%s\".", aRequest:method(), aRequest:pathAndQuery())
+		router.dispatchHandler(handler, aRequest, aResponse)
 		local endTime = socket.gettime()
 		if (endTime - beginTime >= 0.5) then
 			log("router", "  ^^ Request took %f seconds.", (endTime - beginTime))
 		end
 	else
-		log("router", "UNHANDLED: %s Request for path \"%s\".", method, path)
-		httpResponse.sendError(aClient, 404, "Not found")
+		log("router", "UNHANDLED: %s Request for path \"%s\".", aRequest:method(), aRequest:pathAndQuery())
+		aResponse:sendError(404, "Not Found")
 	end
 end
 
@@ -118,14 +192,19 @@ end
 
 
 
---- Returns the handler matching the specified method and path
+--- Returns the handler function matching the specified request
 -- Returns nil if no match found
-function router.findHandler(aMethod, aPath)
-	assert(type(aMethod) == "string")
-	assert(type(aPath) == "string")
+function router.match(aRequest)
+	assert(aRequest)
+	assert(aRequest.httpVersion)
 
-	for _, route in ipairs(router.routes[aMethod] or {}) do
-		if (route.path == string.sub(aPath, 1, #route.path)) then
+	local method = aRequest:method()
+	local path = aRequest:pathAndQuery()
+	for _, route in ipairs(router.routes[method] or {}) do
+		if (route.path == string.sub(path, 1, #route.path)) then
+			if not(route.handler) then
+				log("router", "ERROR: Route entry found, but no handler present for request %s %s", aRequest:method(), aRequest:pathAndQuery())
+			end
 			return route.handler
 		end
 	end

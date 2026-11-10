@@ -5,8 +5,6 @@ Implements the handlers for the /tariffPlan... endpoints, used to view and edit 
 --]]
 
 local db = require("db")
-local httpResponse = require("httpResponse")
-local httpRequest = require("httpRequest")
 local multipart = require("multipart")
 local tariffPlan = require("tariffPlan")
 local utils = require("utils")
@@ -91,19 +89,19 @@ end
 
 return {
 	--- Returns an SVG graph of the specified DayType
-	getDayTypeGraph = function(aClient, aPath, aRequestHeaders)
+	getDayTypeGraph = function(aRequest, aResponse)
 		-- Parse params from the URL:
-		local path, query = httpRequest.parseRequestPath(aPath)
+		local path, query = aRequest:parsedPathAndQuery()
 		local dayType = tonumber(query.dayType)
 		local width = tonumber(query.width) or 500
 		local height = tonumber(query.height) or 150
 		if not(dayType) then
-			return httpResponse.sendError(aClient, 400, "Missing 'dayTypeParam' parameter")
+			return aResponse:sendError(400, "Missing 'dayTypeParam' parameter")
 		end
 
 		-- Draw the graph:
 		if not(tariffPlan.dayTypeSchedules[dayType]) then
-			return httpResponse.sendError(aClient, 400, "No such daytype")
+			return aResponse:sendError(400, "No such daytype")
 		end
 		local graph = {
 			string.format('<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d">', width, height)
@@ -131,27 +129,26 @@ return {
 
 		-- Send the resulting SVG data to the client:
 		local svgString = table.concat(graph, "\n")
-		httpResponse.send(aClient, 200, { ["Content-Type"] = "image/svg+xml" }, svgString)
+		aResponse:sendRawDataWithLength(svgString, "image/svg+xml")
 	end,
 
 
 
 
 
-	getEditDayType = function(aClient, aPath, aRequestHeaders)
-		local dayType = tonumber(string.match(aPath, "/tariffPlan/editDayType/(%d+)"))
+	getEditDayType = function(aRequest, aResponse)
+		local dayType = tonumber(string.match(aRequest:parsedPathAndQuery(), "/tariffPlan/editDayType/(%d+)"))
 		if not(dayType) then
-			return httpResponse.sendError(aClient, 400, "Invalid dayType parameter")
+			return aResponse:sendError(400, "Invalid dayType parameter")
 		end
 		if not(tariffPlan.dayTypeSchedules[dayType]) then
-			return httpResponse.sendError(aClient, 400, "No such dayType")
+			return aResponse:sendError(400, "No such dayType")
 		end
-		local body = require("Templates").tariffPlanEditDayType({
+		aResponse:sendTemplate("tariffPlanEditDayType", {
 			currentTime = os.time(),
 			dayType = dayType,
 			dayTypeSchedule = tariffPlan.dayTypeSchedules[dayType],
 		})
-		httpResponse.send(aClient, "200 OK", nil, body)
 	end,
 
 
@@ -159,65 +156,59 @@ return {
 
 
 	--- Exports the entire tariffPlan data into a single source file that can then be imported using postImport()
-	getExport = function(aClient, aPath, aRequestHeaders)
-		local headers =
-		{
-			["Content-Type"] = "text/plain",
-			["Content-Disposition"] = "attachment; filename=\"tariffPlan.txt\""
-		}
-		httpResponse.send(aClient, "200 OK", headers, tariffPlan.export())
+	getExport = function(aRequest, aResponse)
+		aResponse:setHeader("Content-Disposition", "attachment; filename=\"tariffPlan.txt\"")
+		aResponse:sendRawDataWithLength(tariffPlan.export(), "text/plain")
 	end,
 
 
 
 
 
-	getImport = function(aClient, aPath, aRequestHeaders)
-		httpResponse.send(aClient, "200 OK", nil, require("Templates").tariffPlanImport())
+	getImport = function(aRequest, aResponse)
+		aResponse:sendTemplate("tariffPlanImport", {})
 	end,
 
 
 
 
 
-	getTariffPlan = function(aClient, aPath, aRequestHeaders)
-		local body = require("Templates").tariffPlan({
+	getTariffPlan = function(aRequest, aResponse)
+		aResponse:sendTemplate("tariffPlan", {
 			currentTime = os.time(),
 			seasons = tariffPlan.seasons,
 			dayTypeSchedules = tariffPlan.dayTypeSchedules,
 			exceptionDates = tariffPlan.exceptionDates,
 		})
-		httpResponse.send(aClient, "200 OK", nil, body)
 	end,
 
 
 
 
 
-	postAddNewDayType = function(aClient, aPath, aRequestHeaders)
+	postAddNewDayType = function(aRequest, aResponse)
 		local dayType = tariffPlan.addNewDayType()
 		if (dayType) then
-			return httpResponse.sendRedirect(aClient, "/tariffPlan/editDayType/" .. dayType)
+			return aResponse:sendRedirect("/tariffPlan/editDayType/" .. dayType)
 		end
-		return httpResponse.sendRedirect(aClient, "/tariffPlan")
+		return aResponse:sendRedirect("/tariffPlan")
 	end,
 
 
 
 
 
-	postAddNewDayTypeSlot = function (aClient, aPath, aRequestHeaders)
+	postAddNewDayTypeSlot = function (aRequest, aResponse)
 		-- Parse the inputs:
-		local body = httpRequest.readBody(aClient, aRequestHeaders)
-		local m = multipart(body, aRequestHeaders["content-type"])
-		local startMinute, errStartMinute = utils.parseMinutes((m:get("startMinute") or {}).value)
-		local endMinute, errEndMinute = utils.parseMinutes((m:get("endMinute") or {}).value)
-		local multiplier, errMultiplier = tonumber((m:get("multiplier") or {}).value)
-		local dayType = tonumber((m:get("dayType") or {}).value)
+		local m = aRequest:formData() or {}
+		local startMinute, errStartMinute = utils.parseMinutes(m.startMinute)
+		local endMinute, errEndMinute = utils.parseMinutes(m.endMinute)
+		local multiplier, errMultiplier = tonumber(m.multiplier)
+		local dayType = tonumber(m.dayType)
 
 		-- Check validity:
 		if not(startMinute and endMinute and multiplier and dayType) then
-			return httpResponse.sendError(aClient, 400, string.format(
+			return aResponse:sendError(400, string.format(
 				[[Missing required fields:<br />
 				dayType = %s<br />
 				startMinute = %s (%s)<br />
@@ -231,57 +222,55 @@ return {
 			))
 		end
 		if not(tariffPlan.dayTypeSchedules[dayType]) then
-			return httpResponse.sendError(aClient, 400, "No such dayType")
+			return aResponse:sendError(400, "No such dayType")
 		end
 
 		-- Add:
 		tariffPlan.addNewDayTypeSlot(dayType, startMinute, endMinute, multiplier)
-		return httpResponse.sendRedirect(aClient, "/tariffPlan/editDayType/" .. dayType)
+		return aResponse:sendRedirect("/tariffPlan/editDayType/" .. dayType)
 	end,
 
 
 
 
 
-	postAddNewExceptionDate = function(aClient, aPath, aRequestHeaders)
+	postAddNewExceptionDate = function(aRequest, aResponse)
 		-- Parse the inputs:
-		local body = httpRequest.readBody(aClient, aRequestHeaders)
-		local m = multipart(body, aRequestHeaders["content-type"])
-		local exceptionDate = (m:get("exceptionDate") or {}).value
-		local dayType = tonumber((m:get("dayType") or {}).value)
+		local m = aRequest:formData() or {}
+		local exceptionDate = m.exceptionDate
+		local dayType = tonumber(m.dayType)
 		if not(exceptionDate and dayType) then
-			return httpResponse.sendError(aClient, 400, "Missing required fields")
+			return aResponse:sendError(400, "Missing required fields")
 		end
 
 		-- Check the validity:
 		if not(utils.checkYmdDate(exceptionDate)) then
-			return httpResponse.sendError(aClient, 400, "Invalid exception date")
+			return aResponse:sendError(400, "Invalid exception date")
 		end
 		if not(tariffPlan.dayTypeSchedules[dayType]) then
-			return httpResponse.sendError(aClient, 400, "No such DayType")
+			return aResponse:sendError(400, "No such DayType")
 		end
 
 		-- Add the exception:
 		tariffPlan.addNewExceptionDate(exceptionDate, dayType)
-		return httpResponse.sendRedirect(aClient, "/tariffPlan")
+		return aResponse:sendRedirect("/tariffPlan")
 	end,
 
 
 
 
 
-	postAddNewSeason = function(aClient, aPath, aRequestHeaders)
+	postAddNewSeason = function(aRequest, aResponse)
 		-- Parse the inputs:
-		local body = httpRequest.readBody(aClient, aRequestHeaders)
-		local m = multipart(body, aRequestHeaders["content-type"])
-		local startDate = (m:get("startDate") or {}).value
-		local endDate = (m:get("endDate") or {}).value
-		local workdayDayType = tonumber((m:get("workdayDayType") or {}).value)
-		local weekendDayType = tonumber((m:get("weekendDayType") or {}).value)
+		local m = aRequest:formData() or {}
+		local startDate = m.startDate
+		local endDate = m.endDate
+		local workdayDayType = tonumber(m.workdayDayType)
+		local weekendDayType = tonumber(m.weekendDayType)
 
 		-- Check validity:
 		if not(startDate and endDate and workdayDayType and weekendDayType) then
-			return httpResponse.sendError(aClient, 400, string.format(
+			return aResponse:sendError(400, string.format(
 				[[Missing required fields:<br />
 				startDate = %s<br />
 				endDate = %s<br />
@@ -292,64 +281,62 @@ return {
 			))
 		end
 		if not(utils.checkYmdDate(startDate) and utils.checkYmdDate(endDate)) then
-			return httpResponse.sendError(aClient, 400, "Invalid startDate or endDate")
+			return aResponse:sendError(400, "Invalid startDate or endDate")
 		end
 		if not(tariffPlan.dayTypeSchedules[workdayDayType] and tariffPlan.dayTypeSchedules[weekendDayType]) then
-			return httpResponse.sendError(aClient, 400, "Invalid day type")
+			return aResponse:sendError(400, "Invalid day type")
 		end
 
 		-- Add:
 		tariffPlan.addNewSeason(startDate, endDate, workdayDayType, weekendDayType)
-		return httpResponse.sendRedirect(aClient, "/tariffPlan")
+		return aResponse:sendRedirect("/tariffPlan")
 	end,
 
 
 
 
 
-	postImport = function(aClient, aPath, aRequestHeaders)
+	postImport = function(aRequest, aResponse)
 		-- Parse the inputs:
-		local body = httpRequest.readBody(aClient, aRequestHeaders)
-		local m = multipart(body, aRequestHeaders["content-type"])
-		local tariffPlanFileContents = (m:get("tariffPlanFile") or {}).value
+		local m = aRequest:formData() or {}
+		local tariffPlanFileContents = m.tariffPlanFile
 		if not(tariffPlanFileContents) then
-			return httpResponse.sendError(aClient, 400, "No file contents")
+			return aResponse.sendError(400, "No file contents")
 		end
 
 		-- Parse the file:
 		local seasons, dayTypes, exceptionDates = tariffPlan.parseFile(tariffPlanFileContents)
 		if not(seasons) then
-			return httpResponse.sendError(aClient, 400, tostring(dayTypes))
+			return aResponse:sendError(400, tostring(dayTypes))
 		end
 
 		-- Replace the plan:
 		tariffPlan.replace(seasons, dayTypes, exceptionDates)
-		return httpResponse.sendRedirect(aClient, "/tariffPlan")
+		return aResponse:sendRedirect("/tariffPlan")
 	end,
 
 
 
 
 
-	postRemoveExceptionDate = function(aClient, aPath, aRequestHeaders)
+	postRemoveExceptionDate = function(aRequest, aResponse)
 		-- Parse the inputs:
-		local body = httpRequest.readBody(aClient, aRequestHeaders)
-		local m = multipart(body, aRequestHeaders["content-type"])
-		local exceptionDate = (m:get("exceptionDate") or {}).value
+		local m = aRequest:formData() or {}
+		local exceptionDate = m.exceptionDate
 
 		-- Check validity:
 		if not(exceptionDate) then
-			return httpResponse.sendError(aClient, 400, "Missing required fields")
+			return aResponse:sendError(400, "Missing required fields")
 		end
 		if not(utils.checkYmdDate(exceptionDate)) then
-			return httpResponse.sendError(aClient, 400, "Invalid exceptionDate")
+			return aResponse:sendError(400, "Invalid exceptionDate")
 		end
 		if not(tariffPlan.exceptionDates[exceptionDate]) then
-			return httpResponse.sendError(aClient, 400, "Not an exception date")
+			return aResponse:sendError(400, "Not an exception date")
 		end
 
 		-- Remove:
 		tariffPlan.removeExceptionDate(exceptionDate)
-		return httpResponse.sendRedirect(aClient, "/tariffPlan")
+		return aResponse:sendRedirect("/tariffPlan")
 	end,
 }

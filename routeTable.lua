@@ -22,6 +22,7 @@ return {
 		{ path = "/rawDataExport/rawData",              handler = require("Handlers.rawDataExport").getRawData },
 		{ path = "/remoteImport",                       handler = require("Handlers.remoteImport").getRemoteImport },
 		{ path = "/savings?",                           handler = require("Handlers.savings").get },
+		{ path = "/shutdown",                           handler = require("Handlers.shutdown") },
 		{ path = "/tariffPlan/dayTypeGraph?",           handler = require("Handlers.tariffPlanUI").getDayTypeGraph },
 		{ path = "/tariffPlan/editDayType/",            handler = require("Handlers.tariffPlanUI").getEditDayType },
 		{ path = "/tariffPlan/export",                  handler = require("Handlers.tariffPlanUI").getExport },

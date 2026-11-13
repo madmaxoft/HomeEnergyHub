@@ -2,7 +2,7 @@
 
 --[[ Implements receiving measurements from the Chint sensor.
 Returns the function that receives the measurement data in a loop
-Usage: copas.addthread(require("chintSensor"))
+Usage: require("chintSensor").start()
 --]]
 
 
@@ -16,6 +16,9 @@ local log = require("logger").log
 
 --- The UDP port to listen for incoming sensor data:
 local gSensorPort = 5556
+
+--- Global flag used for terminating the listeners
+local gShouldTerminate = false
 
 
 
@@ -95,7 +98,7 @@ local function receiveLoop()
 	log("chint", "Listening for data on UDP port %d", gSensorPort)
 
 	-- receive loop
-	while not(copas.exiting()) do
+	while not(copas.exiting() or gShouldTerminate) do
 		local msg, ip, port = listener:receivefrom()
 
 		if (msg) then
@@ -119,6 +122,10 @@ local function receiveLoop()
 
 	-- flush on exit
 	commitBucket()
+
+	-- Close the socket:
+	listener:close()
+
 	log("chint", "Finished")
 end
 
@@ -127,7 +134,14 @@ end
 
 return {
 	start = function()
-		copas.addthread(receiveLoop)
+		copas.addnamedthread("chintSensor", receiveLoop)
+	end,
+	stop = function()
+		log("chint", "Stopping")
+		gShouldTerminate = true
+		local wakeupSocket = assert(socket.udp())
+		wakeupSocket:sendto("SHUTDOWN", "127.0.0.1", gSensorPort)
+		wakeupSocket:close()
 	end,
 	sensorNameMap = gSensorNameMap,
 }

@@ -225,6 +225,19 @@ end
 
 
 
+--- Logs the copas status to the log. Used for troubleshooting.
+function M.logCopasStatus()
+	local status = require("copas").status()
+	local log = require("logger").log
+	for key, value in pairs(status) do
+		log("copas", string.format("%s = %s", key, tostring(value)))
+	end
+end
+
+
+
+
+
 --- Returns the YMD representation of the day following the specified date.
 -- Returns nil and optional error message if the specified date is not valid
 function M.nextDayYmd(aDateStr)

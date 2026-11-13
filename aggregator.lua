@@ -17,6 +17,13 @@ local perf = require("perf")
 
 
 
+--- When set to true, al the aggregator threads will terminate
+local gShouldTerminate = false
+
+
+
+
+
 local aggregator =
 {
 	-- Pause switch, activated when remoteImport is underway
@@ -103,7 +110,7 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 	local subsystemName = string.format("aggregator %d", aIntervalSeconds)
 	local numLoops = 0
 	local lastCurrentAggregationTs = nil
-	while not(copas.exiting()) do
+	while not(copas.exiting() or gShouldTerminate) do
 		if (aggregator.shouldPause) then
 			copas.sleep(1)
 		else
@@ -140,11 +147,11 @@ local function aggregatorLoop(aIntervalSeconds, aTargetTable)
 					copas.sleep(0.1)
 				end
 			else
-				log(subsystemName, "No more available buckets in DB")
-				copas.sleep(30)
+				copas.sleep(1)
 			end
 		end
 	end
+	log(subsystemName, "Terminated")
 end
 
 
@@ -176,16 +183,31 @@ end
 
 --- Starts the aggregator Copas threads
 function aggregator.start()
-	copas.addnamedthread(function()
-		aggregatorLoop(60, "ElectricityConsumptionAggregate1min")
-	end, "aggregator-1min")
-	copas.addnamedthread(function()
-		aggregatorLoop(15 * 60, "ElectricityConsumptionAggregate15min")
-	end, "aggregator-15min")
-	copas.addthread(function()
-		aggregatorLoop(24 * 60 * 60, "ElectricityConsumptionAggregateDay")
-	end, "aggregator-1day")
+	aggregator.threads =
+	{
+		copas.addnamedthread(function()
+			aggregatorLoop(60, "ElectricityConsumptionAggregate1min")
+		end, "aggregator-1min"),
+		copas.addnamedthread(function()
+			aggregatorLoop(15 * 60, "ElectricityConsumptionAggregate15min")
+		end, "aggregator-15min"),
+		copas.addnamedthread(function()
+			aggregatorLoop(24 * 60 * 60, "ElectricityConsumptionAggregateDay")
+		end, "aggregator-1day"),
+	}
 	log("aggregators", "Started aggregations")
+end
+
+
+
+
+
+function aggregator.stop()
+	gShouldTerminate = true
+	for _, thr in ipairs(aggregator.threads or {}) do
+		copas.wakeup(thr)
+	end
+	log("aggregators", "Stopped all aggregator threads")
 end
 
 

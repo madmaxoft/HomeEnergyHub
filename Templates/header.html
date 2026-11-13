@@ -1,0 +1,18 @@
+<table class="headerTable" border=1 cellspacing=0>
+<tr>
+<th><a href="/">Home</a></th>
+<th><a href="/tariffPlan">Tariff plan</a></th>
+<th><a href="/savings?from=now&numdays=31">Plan savings</a></th>
+<% if not(request.isReadOnly) then %>
+<th>
+<details class="maintenance">
+	<summary>Maintenance</summary>
+	<div class="maintenanceMenu">
+		<a href="remoteImport">Remote import</a>
+		<a href="/config">Configuration</a>
+		<a href="/shutdown">Shutdown</a>
+	</div>
+</details>
+</th><% end %>
+</tr>
+</table>

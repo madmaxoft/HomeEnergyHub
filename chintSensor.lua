@@ -44,6 +44,7 @@ local gSensorNameMap =
 local db = require("db")
 local socket = require("socket")
 local copas = require("copas")
+local aggregator = require("aggregator")
 
 
 
@@ -61,6 +62,7 @@ local currentData = {}
 local function commitBucket()
 	if (currentBucketTs and (next(currentData) ~= nil)) then
 		db.saveSingleElectricityMeasurement(currentBucketTs, currentData)
+		aggregator.updateLastAggregate()
 	end
 end
 

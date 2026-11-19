@@ -1,7 +1,6 @@
 -- test-aggregator.lua
 
---[[ Performs a simple test on the aggregator in a single-threaded environment suitable for IDE debugging
-Assumes that the aggregator module exports a debug sub-table with the internal functions to be tested
+--[[ Performs a simple test on the aggregator in a single-threaded environment suitable for IDE debugging.
 --]]
 
 
@@ -16,36 +15,32 @@ local perf = require("perf")
 
 
 
---- Test aggregating one historical bucket, same code as aggregator's aggregatorLoop() does:
-local intervalSeconds = 15 * 60
-local targetTable = "ElectricityConsumptionAggregate15min"
-local now = os.time()
-local currentBucket = now - now % intervalSeconds
-local timer = perf.newTimer("test-aggregator")
-
-local startTs, endTs = aggregator.debug.findNextAggregationBucket(targetTable, intervalSeconds, currentBucket)
-timer("findNextAggregationBucket")
-
-if (startTs) then
-	print(string.format("Found bucket %d (%s)", startTs, os.date("!%Y-%m-%d %H:%M:%S", startTs)))
-	local agg = aggregator.debug.calcAggregationForBucket(startTs, endTs)
-	timer("calcAggregationForBucket")
-	db.saveAggregateBucket(targetTable, startTs, agg, intervalSeconds)
-	timer("saveAggregateBucket")
-	if (agg) then
-		print("Aggregated:")
-		for k, v in pairs(agg) do
-			print(string.format("\t%s = %s", tostring(k), tostring(v)))
-		end
-	else
-		print("No aggregated data")
-	end
-else
-	print("No unprocessed bucket found")
+local function progressCallback(aStartTimeStamp, aEndTimeStamp, aCurrentTimeStamp, aCurrentInterval)
+	local percentage = 100 * (aCurrentTimeStamp - aStartTimeStamp) / (aEndTimeStamp - aStartTimeStamp)
+	print(string.format("[%ds] Progress: %d within %d to %d, %.2f%%", aCurrentInterval, aCurrentTimeStamp, aStartTimeStamp, aEndTimeStamp, percentage))
 end
 
 
 
+
+
+print("Updating the last aggregate...")
+aggregator.updateLastAggregate()
+
+print("Updating one day of historical data...")
+db.debug.beginTransaction()
+local ts, msg = db.getLastElectricityConsumptionMeasurementTimestamp()
+if not(ts) then
+	print("Cannot get the last measurement timestamp, using 'now': " .. tostring(msg))
+	ts = os.time()
+end
+local startTS = ts - 24 * 60 * 60
+local endTS = ts
+print("Re-aggregating from " .. os.date("!%Y-%m-%d %H:%M:%S", startTS) .. " to " .. os.date("!%Y-%m-%d %H:%M:%S", endTS))
+local timer = perf.newTimer()
+aggregator.aggregate(startTS, endTS, progressCallback)
+db.debug.commitTransaction()
+timer("aggregated")
 
 
 

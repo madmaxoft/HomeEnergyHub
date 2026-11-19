@@ -1,71 +1,40 @@
 -- aggregator.lua
 
 --[[
-Implements the data aggregation in background threads.
+Implements the data aggregation.
+
+The sensors should call require("aggregator").updateLatestAggregate() whenever a new datapoint has been
+stored in the DB.
+
+External tools can use require("aggregator").aggregate(startTimeStamp, endTimeStamp) to (re-)aggregate
+all aggregated values within the specified timestamp range.
 --]]
 
 
 
 
 
-local copas = require("copas")
 local db = require("db")
 local log = require("logger").log
-local perf = require("perf")
 
 
 
 
 
---- When set to true, al the aggregator threads will terminate
-local gShouldTerminate = false
+--- The API returned by this module
+local aggregator = {}
 
 
 
 
 
-local aggregator =
+--- All aggregators' descriptions:
+local gAggregators =
 {
-	-- Pause switch, activated when remoteImport is underway
-	shouldPause = false,
-
-	--- Specifies whether to log performance in the aggregator loop
-	shouldLogPerf = false,
+	{tableName = "ElectricityConsumptionAggregate1min", interval = 60},
+	{tableName = "ElectricityConsumptionAggregate15min", interval = 15 * 60},
+	{tableName = "ElectricityConsumptionAggregateDay", interval = 24 * 60 * 60},
 }
-
-
-
-
-
---- Finds the next historical aggregation bucket
--- Returns startTs, endTs; or nil if no historical bucket remains
-local function findNextAggregationBucket(aTargetTable, aIntervalSeconds, aCurrentBucket)
-	assert(type(aTargetTable) == "string")
-	assert(type(aIntervalSeconds) == "number")
-	assert(type(aCurrentBucket) == "number")
-
-	local minTs, maxTs = db.electricityConsumptionDataRange()
-	if not(minTs) then
-		return nil
-	end
-
-	local minBucket = minTs - minTs % aIntervalSeconds
-	local nextBucket = db.aggregationProgress(aTargetTable)
-
-	if not(nextBucket) then
-		-- Initialize just before the current bucket, or at the latest raw bucket if older
-		local maxBucket = maxTs - maxTs % aIntervalSeconds
-		nextBucket = math.min(maxBucket, aCurrentBucket - aIntervalSeconds)
-		db.setAggregationProgress(aTargetTable, nextBucket)
-	end
-
-	if ((nextBucket < minBucket) or (nextBucket >= aCurrentBucket)) then
-		-- Nothing historical remains
-		return nil
-	end
-
-	return nextBucket, nextBucket + aIntervalSeconds
-end
 
 
 
@@ -77,7 +46,7 @@ local function calcAggregationForBucket(aStartTs, aEndTs)
 	assert(type(aStartTs) == "number")
 	assert(type(aEndTs) == "number")
 
-	local energy = db.getBucketEnergyAndPower(aStartTs, aEndTs)
+	local energy = db.aggregationBucketEnergyAndPower(aStartTs, aEndTs)
 	if not(energy) then
 		return nil
 	end
@@ -101,113 +70,62 @@ end
 
 
 
---- Core aggregator loop running in Copas thread
--- Loops from newest to oldest bucket
-local function aggregatorLoop(aIntervalSeconds, aTargetTable)
+--- (Re-)aggregates all the data in the specified interval
+-- aProgressCallback is called periodically with parameters aStartTimeStamp, aEndTimeStamp, aCurrentTimeStamp, aIntervalSeconds
+-- Note that the callback may be called with aCurrentTimeStamp below aStartTimeStamp
+-- If the callback returns true, the aggregation is aborted
+-- Returns true on success, nil and message on failure (or abort)
+local function aggregateSingleInterval(aTableName, aIntervalSeconds, aStartTimeStamp, aEndTimeStamp, aProgressCallback)
+	assert(type(aTableName) == "string")
 	assert(type(aIntervalSeconds) == "number")
-	assert(type(aTargetTable) == "string")
+	assert(aIntervalSeconds > 0)
+	assert(type(aStartTimeStamp) == "number")
+	assert(type(aEndTimeStamp) == "number")
 
-	local subsystemName = string.format("aggregator %d", aIntervalSeconds)
-	local numLoops = 0
-	local lastCurrentAggregationTs = nil
-	while not(copas.exiting() or gShouldTerminate) do
-		if (aggregator.shouldPause) then
-			copas.sleep(1)
-		else
-			local timer = aggregator.shouldLogPerf and perf.newTimer(subsystemName) or function() end
-			local now = os.time()
-			local currentBucket = now - now % aIntervalSeconds
-
-			-- Refresh the current bucket at most once per second
-			if (now ~= lastCurrentAggregationTs) then
-				local agg = calcAggregationForBucket(currentBucket, currentBucket + aIntervalSeconds)
-				timer("calcCurrentBucket")
-				if (agg) then
-					db.insertAggregate(aTargetTable, currentBucket, agg)
-					timer("insertCurrentBucket")
-				end
-				lastCurrentAggregationTs = now
-			end
-
-			-- Process one historic bucket:
-			local startTs, endTs = findNextAggregationBucket(aTargetTable, aIntervalSeconds, currentBucket)
-			timer("findNextAggregationBucket")
-
-			if (startTs) then
-				local agg = calcAggregationForBucket(startTs, endTs)
-				timer("calcAggregationForBucket")
-				db.saveAggregateBucket(aTargetTable, startTs, agg, aIntervalSeconds)
-				timer("saveAggregateBucket")
-
-				-- Every 20 loops sleep for a longer time to give other threads a chance to run, too
-				numLoops = (numLoops + 1) % 20
-				if (numLoops == 0) then
-					copas.sleep(1)
-				else
-					copas.sleep(0.1)
-				end
-			else
-				copas.sleep(1)
+	local startTS = aStartTimeStamp - aStartTimeStamp % aIntervalSeconds
+	local endTS = aEndTimeStamp - aEndTimeStamp % aIntervalSeconds
+	for t = startTS, endTS, aIntervalSeconds do
+		local agg = calcAggregationForBucket(t, t + aIntervalSeconds)
+		if (agg) then
+			db.insertAggregate(aTableName, t, agg, aIntervalSeconds)
+		end
+		if (aProgressCallback ~= nil) then
+			if (aProgressCallback(aStartTimeStamp, aEndTimeStamp, t, aIntervalSeconds)) then
+				return nil, "Aborted"
 			end
 		end
 	end
-	log(subsystemName, "Terminated")
+	return true
 end
 
 
 
 
 
---- Invalidates aggregation progress in the specified timestamp range (used mainly for historic import)
-function aggregator.invalidateFrom(aStartTs, aEndTs)
-	assert(type(aStartTs) == "number")
-	assert(type(aEndTs) == "number")
-	assert(aEndTs >= aStartTs)
-
-	for _, target in ipairs({
-		{"ElectricityConsumptionAggregate1min", 60},
-		{"ElectricityConsumptionAggregate15min", 15 * 60},
-		{"ElectricityConsumptionAggregateDay", 24 * 60 * 60},
-	}) do
-		local tableName = target[1]
-		local interval = target[2]
-		local lastAffectedBucket = aEndTs - aEndTs % interval
-
-		db.setAggregationProgress(tableName, lastAffectedBucket)
+--- (Re-)aggregates all the data in the specified interval
+-- aProgressCallback is called periodically with parameters aStartTimeStamp, aEndTimeStamp, aCurrentTimeStamp, aCurrentInterval
+-- Note that the callback may be called with aCurrentTimeStamp below aStartTimeStamp
+-- If the callback returns true, the aggregation is aborted
+-- Returns true on success, nil and message on failure (or abort)
+function aggregator.aggregate(aStartTimeStamp, aEndTimeStamp, aProgressCallback)
+	for _, target in ipairs(gAggregators) do
+		local res, msg = aggregateSingleInterval(target.tableName, target.interval, aStartTimeStamp, aEndTimeStamp, aProgressCallback)
+		if not(res) then
+			return nil, tostring(msg)
+		end
 	end
+	return true
 end
 
 
 
 
 
---- Starts the aggregator Copas threads
-function aggregator.start()
-	aggregator.threads =
-	{
-		copas.addnamedthread(function()
-			aggregatorLoop(60, "ElectricityConsumptionAggregate1min")
-		end, "aggregator-1min"),
-		copas.addnamedthread(function()
-			aggregatorLoop(15 * 60, "ElectricityConsumptionAggregate15min")
-		end, "aggregator-15min"),
-		copas.addnamedthread(function()
-			aggregatorLoop(24 * 60 * 60, "ElectricityConsumptionAggregateDay")
-		end, "aggregator-1day"),
-	}
-	log("aggregators", "Started aggregations")
-end
-
-
-
-
-
-function aggregator.stop()
-	gShouldTerminate = true
-	for _, thr in ipairs(aggregator.threads or {}) do
-		copas.wakeup(thr)
-	end
-	log("aggregators", "Stopped all aggregator threads")
+--- Updates the latest aggregate in the DB based on the data already in the DB
+-- Returns true on success, nil and message on failure
+function aggregator.updateLastAggregate()
+	local now = os.time()
+	return aggregator.aggregate(now, now)
 end
 
 
@@ -217,8 +135,8 @@ end
 -- Export the local helper functions in order to facilitate testing:
 aggregator.debug =
 {
-	findNextAggregationBucket = findNextAggregationBucket,
 	calcAggregationForBucket = calcAggregationForBucket,
+	aggregateSingleInterval = aggregateSingleInterval,
 }
 
 return aggregator

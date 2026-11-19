@@ -26,6 +26,12 @@ local gElectricityConsumptionAggregationToTableName = {
 	[24 * 60 * 60] = "ElectricityConsumptionAggregateDay",
 }
 
+--- Dict-table of aggregation table name -> interval seconds. Built from gElectricityConsumptionAggregationToTableName.
+local gElectricityConsumptionAggregationTableNames = {}
+for interval, tableName in pairs(gElectricityConsumptionAggregationToTableName) do
+	gElectricityConsumptionAggregationTableNames[tableName] = interval
+end
+
 
 
 
@@ -117,53 +123,12 @@ end
 
 
 
---- Returns the next bucket to process for the specified aggregation table, if progress is saved.
--- Returns nil if no progress is stored
-function db.aggregationProgress(aTableName)
-	assert(type(aTableName) == "string")
-
-	local rows = lldb.arrayFromQuery(gDB, [[
-		SELECT nextBucket
-		FROM aggr.AggregationProgress
-		WHERE tableName = ?
-	]], {aTableName}, "aggregationProgress")
-
-	return rows[1] and rows[1].nextBucket
-end
-
-
-
-
-
---- Returns an array-table of all config values, as {identifier = "", dbValue = ""} items
--- Returns an empty array on empty DB.
--- Returns nil and error message on error.
-function db.allConfigValues()
-	return lldb.arrayFromQuery(gDB, "SELECT * FROM UserData.Config", {}, "allConfigValues")
-end
-
-
-
-
-
---- Closes the DB connection
-function db.close()
-	if (gDB) then
-		gDB:close()
-		gDB = nil
-	end
-end
-
-
-
-
-
---- Returns the energy deltas (for any available phases) and min/max power for a bucket
+--- Returns the energy deltas (for any available phases) and min/max power for an aggregation bucket
 -- Returns a dict-table containing:
 --   energyTotal, energyA, energyB, energyC   (only if computable; otherwise nil)
 --   minPowerTotal, minPowerA, ...            (always present)
 -- Returns nil if NO energy values can be computed at all.
-function db.getBucketEnergyAndPower(aStartTs, aEndTs)
+function db.aggregationBucketEnergyAndPower(aStartTs, aEndTs)
 
 	--- Helper: interpolate a single numeric field, return nil if cannot interpolate
 	local function interpField(beforeVal, afterVal, tBefore, tAfter, tTarget)
@@ -264,6 +229,29 @@ function db.getBucketEnergyAndPower(aStartTs, aEndTs)
 	rows.energyC     = energyC
 
 	return rows
+end
+
+
+
+
+
+--- Returns an array-table of all config values, as {identifier = "", dbValue = ""} items
+-- Returns an empty array on empty DB.
+-- Returns nil and error message on error.
+function db.allConfigValues()
+	return lldb.arrayFromQuery(gDB, "SELECT * FROM UserData.Config", {}, "allConfigValues")
+end
+
+
+
+
+
+--- Closes the DB connection
+function db.close()
+	if (gDB) then
+		gDB:close()
+		gDB = nil
+	end
 end
 
 
@@ -469,6 +457,7 @@ end
 function db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
 	assert(gDB)
 	assert(type(aTableName) == "string")
+	assert(gElectricityConsumptionAggregationTableNames[aTableName])  -- Valid aggregation table name?
 	assert(type(aTimeStamp) == "number")
 	assert(type(aAggregatedMeasurement) == "table")
 
@@ -561,37 +550,6 @@ function db.replaceTariffPlanSeasons(aSeasons)
 		lldb.checkSql(gDB, stmt:reset(), "replaceTariffPlanSeasons.reset")
 	end
 	lldb.checkSql(gDB, stmt:finalize(), "replaceTariffPlanSeasons.finalize")
-end
-
-
-
-
-
---- Saves an aggregate and advances its progress cursor atomically
--- aAggregatedMeasurement may be nil if the bucket contains no computable data
-function db.saveAggregateBucket(aTableName, aTimeStamp, aAggregatedMeasurement, aIntervalSeconds)
-	assert(gDB)
-	assert(type(aTableName) == "string")
-	assert(type(aTimeStamp) == "number")
-	assert((type(aAggregatedMeasurement) == "table") or (aAggregatedMeasurement == nil))
-	assert(type(aIntervalSeconds) == "number")
-
-	lldb.checkSql(gDB, gDB:exec("BEGIN TRANSACTION"), "saveAggregateBucket.begin")
-
-	local success, err = pcall(function()
-		if (aAggregatedMeasurement) then
-			db.insertAggregate(aTableName, aTimeStamp, aAggregatedMeasurement)
-		end
-
-		db.setAggregationProgress(aTableName, aTimeStamp - aIntervalSeconds)
-	end)
-
-	if not(success) then
-		gDB:exec("ROLLBACK")
-		error(err)
-	end
-
-	lldb.checkSql(gDB, gDB:exec("COMMIT"), "saveAggregateBucket.commit")
 end
 
 
@@ -762,16 +720,21 @@ end
 
 
 
---- Sets the next bucket to process for an aggregation table
-function db.setAggregationProgress(aTableName, aNextBucket)
-	assert(type(aTableName) == "string")
-	assert((type(aNextBucket) == "number") or (aNextBucket == nil))
+--- The following functions are useful in the context of debugging, but should not be used by regular client code
+db.debug =
+{
+	beginTransaction = function()
+		lldb.checkSql(gDB, gDB:exec("BEGIN TRANSACTION"), "saveTariffPlanSeasons.begin")
+	end,
 
-	lldb.executeBoundSql(gDB, [[
-		INSERT OR REPLACE INTO aggr.AggregationProgress (tableName, nextBucket)
-		VALUES (?, ?)
-	]], {aTableName, aNextBucket}, "setAggregationProgress")
-end
+	commitTransaction = function()
+		lldb.checkSql(gDB, gDB:exec("COMMIT TRANSACTION"), "saveTariffPlanSeasons.begin")
+	end,
+
+	rollbackTransaction = function()
+		lldb.checkSql(gDB, gDB:exec("ROLLBACK TRANSACTION"), "saveTariffPlanSeasons.begin")
+	end,
+}
 
 
 

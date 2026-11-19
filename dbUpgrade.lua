@@ -264,6 +264,13 @@ local upgrades = {
 		]],
 	},
 
+	-- Version 9
+	{
+		[[
+			DROP TABLE aggr.AggregationProgress;
+		]],
+	},
+
 	-- Future upgrades can be added here
 }
 

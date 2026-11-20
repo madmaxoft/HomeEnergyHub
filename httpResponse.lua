@@ -271,6 +271,7 @@ function M:sendError(aErrorCode, aErrorText)
 	assert(self)
 	assert(self.mSocket)
 	assert(tonumber(aErrorCode))
+	assert(type(aErrorText) == "string")
 
 	local template = templates["errorPage"]
 	if not(template) then
@@ -278,11 +279,18 @@ function M:sendError(aErrorCode, aErrorText)
 		self:setStatus(500)
 		return self:sendPlainText("Cannot load error page template")
 	end
-	local html, msg = template({errorText = aErrorText, errorCode = aErrorCode})
-	if not(html) then
-		log("httpResponse", "errorPage template execution failed: %s", tostring(msg))
+	local templateParams = {
+		errorText = aErrorText,
+		errorCode = aErrorCode,
+		request = self.mRequest,
+		response = self,
+	}
+	templateParams.utils = require("templateUtils")(templateParams)
+	local isOK, html, msg = pcall(template, templateParams)
+	if (not(isOK) or (type(html) ~= "string")) then
+		log("httpResponse", "errorPage template execution failed: %s", tostring(html))
 		self:setStatus(500)
-		return self:sendPlainText("Cannot render error page: " .. tostring(msg))
+		return self:sendPlainText("Cannot render error page: " .. tostring(html))
 	end
 	self:setStatus(aErrorCode)
 	return self:sendHtml(html)

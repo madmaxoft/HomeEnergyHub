@@ -397,7 +397,8 @@ function M.serializeTable(aTable)
 	local res = {}
 	local n = 0
 	for k, v in pairs(aTable) do
-		if (type(v) == "table") then
+		local vtype = type(v)
+		if (vtype == "table") then
 			n = n + 1
 			local keyRep
 			if (type(k) == "number") then
@@ -406,6 +407,9 @@ function M.serializeTable(aTable)
 				keyRep = string.format("%q", k)
 			end
 			res[n] = string.format("[%s]={%s},", tostring(keyRep), M.serializeTable(v))
+		elseif (vtype == "string") then
+			n = n + 1
+			res[n] = string.format("%s=%q,", tostring(k), v)
 		else
 			n = n + 1
 			res[n] = string.format("%s=%s,", tostring(k), tostring(v))

@@ -48,8 +48,7 @@ function CE.post(aRequest, aResponse)
 	end
 
 	-- Read the form fields:
-	local body = aRequest:readAll()
-	local form = aRequest.parseFormUrlEncoded(body)
+	local form = aRequest:formData()
 	if not(form) then
 		return aResponse:sendError(400, "Failed to parse request body")
 	end

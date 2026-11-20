@@ -15,6 +15,7 @@ return {
 	{
 		{ path = "/static/",                            handler = require("Handlers.static") },
 		{ path = "/Static/",                            handler = require("Handlers.static") },
+		{ path = "/config",                             handler = require("Handlers.configEditor").get },
 		{ path = "/favicon",                            handler = require("Handlers.favicon") },
 		{ path = "/graph?",                             handler = require("Handlers.graph") },
 		{ path = "/rawDataExport/availableRange",       handler = require("Handlers.rawDataExport").getAvailableRange },
@@ -32,6 +33,7 @@ return {
 	},
 	POST =
 	{
+		{ path = "/config",                             handler = require("Handlers.configEditor").post },
 		{ path = "/remoteImport/start",                 handler = require("Handlers.remoteImport").postStart },
 		{ path = "/remoteImport/cancel",                handler = require("Handlers.remoteImport").postCancel },
 		{ path = "/tariffPlan/addNewDayType",           handler = require("Handlers.tariffPlanUI").postAddNewDayType },

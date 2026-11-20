@@ -66,3 +66,158 @@ tr.phaseB {
 tr.phaseC {
 	color: #00c;
 }
+
+
+
+
+/* Config editor: support for description in hint: */
+.config-id
+{
+	white-space: nowrap;
+	font-family: monospace;
+}
+
+.config-tooltip
+{
+	position: relative;
+	cursor: help;
+}
+
+.config-tooltip-text
+{
+	display: none;
+	position: absolute;
+	left: 0;
+	top: 100%;
+
+	background: #ffffe0;
+	border: 1px solid #ccc;
+	padding: 6px;
+
+	white-space: normal;
+	width: 300px;
+
+	z-index: 100;
+}
+
+.config-tooltip:hover .config-tooltip-text
+{
+	display: block;
+}
+
+
+
+
+
+/* Config table striping: */
+.config-table tbody tr:nth-child(odd)
+{
+	background: #f0f0f0;
+}
+
+.config-table tbody tr:nth-child(even)
+{
+	background: #ffffff;
+}
+
+
+
+
+
+/* Config table: stretch input column */
+.config-table th:nth-child(2),
+.config-table td:nth-child(2)
+{
+	width: 100%;
+}
+
+.config-table input[type="text"],
+.config-table input[type="number"]
+{
+	width: 100%;
+	box-sizing: border-box;
+}
+.config-table input[type="password"]
+{
+	width: 45%;
+}
+.config-id
+{
+	white-space: nowrap;
+	font-family: monospace;
+}
+.config-table td:last-child
+{
+	white-space: nowrap;
+}
+
+
+
+
+
+/* Support for on-hover / on-click menu, used for Maintenance links in the header */
+.maintenance {
+	position: relative;
+}
+
+.maintenance summary {
+	cursor: pointer;
+}
+
+.maintenanceMenu {
+	position: absolute;
+	z-index: 100;
+	background: white;
+	border: 1px solid black;
+	padding: 4px;
+	min-width: max-content;
+}
+
+.maintenanceMenu a {
+	display: block;
+	padding: 4px 8px;
+	text-decoration: none;
+}
+
+.maintenanceMenu a:hover {
+	background: #ddd;
+}
+
+@media (hover: hover) {
+	.maintenance:hover .maintenanceMenu {
+		display: block;
+	}
+
+	.maintenance:not([open]) .maintenanceMenu {
+		display: none;
+	}
+}
+
+
+
+
+
+/* Support for the header table's 100% width, sending all the extra space into the search form */
+.headerTable {
+	width: 100%;
+	table-layout: auto;
+}
+
+.headerTable th {
+	white-space: nowrap;
+}
+
+.headerTable .searchColumn {
+	width: 100%;
+}
+
+.headerTable .searchColumn form {
+	display: flex;
+	gap: 4px;
+}
+
+.headerTable .searchColumn input {
+	width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+}

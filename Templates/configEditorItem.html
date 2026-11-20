@@ -34,7 +34,6 @@
 		<textarea name="value"><%= value %></textarea>
 
 	<% elseif (item.valueType == "bool") then %>
-		<input type="hidden" name="value" value="0" />
 		<input type="checkbox" name="value" value="1"
 			<% if (value) then %>checked<% end %>
 		/>

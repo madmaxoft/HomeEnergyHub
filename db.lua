@@ -720,6 +720,29 @@ end
 
 
 
+--- Stores the specified config value
+-- NOTE: the config module does conversion between ConfigValue and the DbValue
+function db.setConfigValue(aIdentifier, aDbValue)
+	if (aDbValue) then
+		local stmt = gDB:prepare([[
+			INSERT INTO Config(identifier, dbValue)
+			VALUES(?, ?)
+			ON CONFLICT(identifier)
+			DO UPDATE SET dbValue = excluded.dbValue
+		]])
+		stmt:bind_values(aIdentifier, aDbValue)
+		stmt:step()
+		stmt:reset()
+		stmt:finalize()
+	else
+		lldb.executeBoundSql(gDB, [[DELETE FROM Config WHERE identifier = ?]], {aIdentifier}, "setConfigValue")
+	end
+end
+
+
+
+
+
 --- The following functions are useful in the context of debugging, but should not be used by regular client code
 db.debug =
 {

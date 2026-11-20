@@ -9,6 +9,7 @@ local utils = require("utils")
 local httpClient = require("httpClient")
 local chintSensor = require("chintSensor")
 local log = require("logger").log
+local bat = require("backgroundAggregationTask")
 
 
 
@@ -30,6 +31,7 @@ return function(aRequest, aResponse)
 	copas.exit()
 	httpClient.closeAllConnections()
 	chintSensor.stop()
+	bat.stop()
 	copas.removeserver(copas.mainServerSocket)
 	for sock, _ in pairs(copas.mainServerClients or {}) do
 		if (sock.close) then

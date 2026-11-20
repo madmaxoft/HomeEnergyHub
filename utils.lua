@@ -389,6 +389,25 @@ end
 
 
 
+--- Formats the number of seconds into a [[HHHH:]MM:]SS string (95 -> "1:35")
+function M.secondsToStr(aNumSeconds)
+	assert(type(aNumSeconds) == "number")
+
+	if (aNumSeconds < 60) then
+		return tostring(aNumSeconds)
+	elseif (aNumSeconds < 60 * 60) then
+		return string.format("%d:%02d", math.floor(aNumSeconds / 60), aNumSeconds % 60)
+	end
+	local numHours = math.floor(aNumSeconds / 3600)
+	local numMinutes = math.floor((aNumSeconds % 3600) / 60)
+	local numSeconds = aNumSeconds % 60
+	return string.format("%d:%02d:%02d", numHours, numMinutes, numSeconds)
+end
+
+
+
+
+
 --- Recursively serializes the specified table into a (dense) string
 function M.serializeTable(aTable)
 	assert(type(aTable) == "table")
@@ -423,9 +442,18 @@ end
 
 
 
---- Convers a timestamp to a string representation YYYY-MM-DD
+--- Convers a timestamp to an UTC string representation YYYY-MM-DD
 function M.timeStampToYmd(aTimeStamp)
-	return os.date("%Y-%m-%d", aTimeStamp)
+	return os.date("!%Y-%m-%d", aTimeStamp)
+end
+
+
+
+
+
+--- Convers a timestamp to an UTC string representation YYYY-MM-DD HH:MM:SS
+function M.timeStampToYmdHms(aTimeStamp)
+	return os.date("!%Y-%m-%d %H:%M:%S", aTimeStamp)
 end
 
 

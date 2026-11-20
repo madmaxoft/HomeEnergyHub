@@ -743,6 +743,31 @@ end
 
 
 
+--- Executes the specified callback within a DB transaction
+-- Returns the first value that the callback returns on success
+-- Raises an error on failure
+function db.withinTransaction(aCallback)
+	assert(type(aCallback) == "function")
+
+	lldb.checkSql(gDB, gDB:exec("BEGIN TRANSACTION"), "withinTransaction")
+	local isSuccess, err = xpcall(aCallback, debug.traceback)
+	if (isSuccess) then
+		local result = gDB:exec("COMMIT")
+		if (result ~= sqlite3.OK) then
+			local commitError = gDB:errmsg()
+			gDB:exec("ROLLBACK")
+			error(commitError, 0)
+		end
+	else
+		lldb.checkSql(gDB, gDB:exec("ROLLBACK"), "withinTransaction")
+		error(err, 0)
+	end
+	return err
+end
+
+
+
+
 --- The following functions are useful in the context of debugging, but should not be used by regular client code
 db.debug =
 {

@@ -80,6 +80,7 @@ local config = require("config")
 local requestTracker = require("requestTracker")
 local httpRequest = require("httpRequest")
 local httpResponse = require("httpResponse")
+local bat = require("backgroundAggregationTask")
 
 
 
@@ -153,9 +154,6 @@ local function startServer()
 		nil,
 		"mainServerSocket"
 	)
-
-	copas.loop()
-	log("main", "Server loop terminated.")
 end
 
 
@@ -174,7 +172,9 @@ end
 --- Start everything:
 log("main", "Starting up...")
 startSensors()
-aggregator.start()
 startServer()
+bat.start()
+
+copas.loop()
 
 log("main", "Finished.")

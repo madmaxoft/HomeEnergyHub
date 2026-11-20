@@ -15,6 +15,7 @@ return {
 	{
 		{ path = "/static/",                            handler = require("Handlers.static") },
 		{ path = "/Static/",                            handler = require("Handlers.static") },
+		{ path = "/backgroundAggregation",              handler = require("Handlers.backgroundAggregation").get },
 		{ path = "/config",                             handler = require("Handlers.configEditor").get },
 		{ path = "/favicon",                            handler = require("Handlers.favicon") },
 		{ path = "/graph?",                             handler = require("Handlers.graph") },
@@ -33,6 +34,7 @@ return {
 	},
 	POST =
 	{
+		{ path = "/backgroundAggregation/setRange",     handler = require("Handlers.backgroundAggregation").postSetRange },
 		{ path = "/config",                             handler = require("Handlers.configEditor").post },
 		{ path = "/remoteImport/start",                 handler = require("Handlers.remoteImport").postStart },
 		{ path = "/remoteImport/cancel",                handler = require("Handlers.remoteImport").postCancel },

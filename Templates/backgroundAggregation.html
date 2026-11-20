@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Background Aggregation - Home Energy Hub</title>
+	<link rel="stylesheet" href="/static/main.css">
+</head>
+
+
+<body>
+	<%- utils.include("header") %>
+
+<h1>Home Energy Hub - Background Aggregation</h1>
+
+<%
+--- Returns the string representing the estimated complation time, or "unknown"
+local function estimatedCompletionTime()
+	local elapsed = os.time() - status.processingStartedOn
+	if (elapsed < 0.1) then
+		return "unknown"
+	end
+	local range = status.endTS - status.startTS
+	local completionSeconds = elapsed / (status.currentTS - status.startTS) * range
+	local completionTS = status.processingStartedOn + completionSeconds
+	return string.format("%s (%s left)",
+		os.date("%Y-%m-%d %H:%M:%S", completionTS),
+		utils.secondsToStr(completionSeconds - elapsed)
+	)
+end
+%>
+
+<% if (status.isRunning) then %>
+	<p>
+	The background aggregation is currently running:
+	<%= math.floor(1000 * (status.currentTS - status.startTS) / (status.endTS - status.startTS)) / 10 %> %
+	</p>
+	<p>
+	Estimated completion time: <%= estimatedCompletionTime() %>
+	</p>
+	<table>
+		<tr><td>From</td><td><%= status.startTS %></td><td><%= utils.timeStampToYmdHms(status.startTS) %></td></tr>
+		<tr><td>Current</td><td><%= status.currentTS %></td><td><%= utils.timeStampToYmdHms(status.currentTS) %></td></tr>
+		<tr><td>To</td><td><%= status.endTS %></td><td><%= utils.timeStampToYmdHms(status.endTS) %></td></tr>
+	</table>
+	<p>
+	<a href="/backgroundAggregation">Refresh</a>
+	</p>
+<% else %>
+	<p>Currently not (re-)aggregating.</p>
+<% end %>
+
+<% if not(request.isReadOnly) then %>
+	<h2>
+	Start new (re-)aggregation:
+	</h2>
+	<form action="/backgroundAggregation/setRange" method="POST" enctype="multipart/form-data">
+	<table>
+		<tr>
+			<td>Start timestamp</td>
+			<td><input type="text" name="startTS" value="<%= range.minTimeStamp %>" style="width:200px" /></td>
+		</tr>
+		<tr>
+			<td>End timestamp</td>
+			<td><input type="text" name="endTS" value="<%= range.maxTimeStamp %>" style="width:200px" /></td>
+		</tr>
+		<tr>
+			<td />
+			<td><input type="submit" value="Start" /></td>
+		</tr>
+	</table>
+	</form>
+<% end %>
+</body>
+</html>

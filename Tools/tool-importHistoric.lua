@@ -4,9 +4,11 @@
 Imports historical tall-format meter data into the new wide-format ElectricityConsumption table.
 Buckets data into 5-second intervals.
 Optimized for batch insertion and progress reporting.
+Also re-aggregates the affectd data range.
 
-Usage: luajit Tools/importHistoric.lua [<oldDb>]
+Usage: luajit Tools/importHistoric.lua [<oldDb> <minTimeStamp>]
 <oldDb> defaults to Meters.sqlite if not provided
+<minTimeStamp> defaults to 0
 
 NOTE: Needs to be run from the main app folder
 --]]
@@ -17,9 +19,10 @@ NOTE: Needs to be run from the main app folder
 
 local sqlite3 = require("lsqlite3")
 local db = require("db")
+local aggr = require("aggregator")
 
 local oldDbName = arg[1] or "Meters.sqlite"
-local bucketInterval = 5  -- seconds
+local minTimeStamp = tonumber(arg[2]) or 0
 local batchSize = 10000   -- number of buckets per DB insert
 
 
@@ -44,7 +47,7 @@ local gSensorNameToColumnName = {
 
 --- Rounds a timestamp down to nearest 5-second bucket
 local function roundToBucket(aTimestamp)
-	return aTimestamp - (aTimestamp % bucketInterval)
+	return aTimestamp - (aTimestamp % 5)
 end
 
 
@@ -52,23 +55,24 @@ end
 
 
 --- Processes the old DB row stream and inserts buckets in batches
-local function importOldDb(aDbName)
+local function importOldDb(aDbName, aMinTimeStamp)
+	assert(type(aDbName) == "string")
+	assert(type(aMinTimeStamp) == "number")
+
 	local rawDb = sqlite3.open(aDbName)
 
-	local stmt = rawDb:prepare([[
+	local stmt = assert(rawDb:prepare([[
 		SELECT Timestamp, SensorName, SensorValue
 		FROM MeterData
 		ORDER BY Timestamp ASC
-	]])
-	if not(stmt) then
-		error("Failed to prepare statement for old DB")
-	end
+		WHERE Timestamp > ?
+	]]))
+	assert(stmt:bind_values({minTimeStamp}))
 
 	local currentBucketTs = nil
 	local currentBucket = nil
 	local batch = {}
 	local nBatch = 0
-
 	for row in stmt:nrows() do
 		local tsBucket = roundToBucket(row.Timestamp)
 
@@ -125,8 +129,10 @@ local function main()
 	print("Backing up the DB...")
 	db.backup()
 	print("Starting import from " .. oldDbName)
-	importOldDb(oldDbName)
-	print("Import completed!")
+	importOldDb(oldDbName, minTimeStamp)
+	print("Import completed. Re-aggregating the data...")
+	aggr.aggregate(minTimeStamp, os.time())
+	print("Done.")
 end
 
 

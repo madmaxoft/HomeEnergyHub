@@ -91,17 +91,12 @@ end
 
 --- Receives incoming measurements from the Chint sensor
 -- Assumes it is run from a separate copas thread
-local function receiveLoop()
-	-- UDP listener setup
-	local listener = socket.udp()
-	listener:setsockname("*", gSensorPort)
-	listener:settimeout(0)
-	listener = copas.wrap(listener)
-	log("chint", "Listening for data on UDP port %d", gSensorPort)
+local function receiveLoop(aListener)
+	assert(aListener ~= nil)
 
 	-- receive loop
 	while not(copas.exiting() or gShouldTerminate) do
-		local msg, ip, port = listener:receivefrom()
+		local msg, ip, port = aListener:receivefrom()
 
 		if (msg) then
 			if (
@@ -126,7 +121,7 @@ local function receiveLoop()
 	commitBucket()
 
 	-- Close the socket:
-	listener:close()
+	aListener:close()
 
 	log("chint", "Finished")
 end
@@ -135,9 +130,17 @@ end
 
 
 return {
+	--- Starts the sensor listening
+	-- Returns true on success, raises an error on failure
 	start = function()
-		copas.addnamedthread("chintSensor", receiveLoop)
+		local listener = assert(socket.udp())
+		assert(listener:setsockname("*", gSensorPort))
+		assert(listener:settimeout(0))
+		listener = assert(copas.wrap(listener))
+		log("chint", "Listening for data on UDP port %d", gSensorPort)
+		copas.addnamedthread("chintSensor", function() receiveLoop(listener) end)
 	end,
+
 	stop = function()
 		log("chint", "Stopping")
 		gShouldTerminate = true

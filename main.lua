@@ -162,7 +162,9 @@ end
 
 --- Starts receiving data from the sensors
 local function startSensors()
+	log("main", "Starting sensors...")
 	chintSensor.start()
+	log("main", "Sensors started...")
 end
 
 

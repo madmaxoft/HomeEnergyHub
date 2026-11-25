@@ -660,10 +660,9 @@ function db.saveSingleElectricityMeasurement(aTimeStamp, aMeasurement)
 	assert(tonumber(aTimeStamp))
 
 	lldb.executeBoundSql(gDB, [[
-		INSERT OR REPLACE INTO ElectricityConsumption (timeStamp, powerTotal, powerA, powerB, powerC, energyTotal, energyA, energyB, energyC)
+		INSERT OR REPLACE INTO ElectricityConsumption (powerTotal, powerA, powerB, powerC, energyTotal, energyA, energyB, energyC, timeStamp)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	]], {
-		aTimeStamp,
 		aMeasurement.powerTotal,
 		aMeasurement.powerA,
 		aMeasurement.powerB,
@@ -672,7 +671,7 @@ function db.saveSingleElectricityMeasurement(aTimeStamp, aMeasurement)
 		aMeasurement.energyA,
 		aMeasurement.energyB,
 		aMeasurement.energyC,
-		n = 9
+		aTimeStamp,
 	}, "saveSingleElectricityMeasurement")
 end
 

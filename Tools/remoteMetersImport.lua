@@ -4,9 +4,10 @@
 Imports data from a remote server running remoteMetersServer.lua
 
 Usage:
-	lua remoteMetersImport.lua <remoteHost[:port]> [<startOffset> [<endOffset>] ]
-Imports the remote data starting at now - startOfset and ending at now - endOffset.
-Offset may be specified in days ("2d") or hours ("48h")
+	lua remoteMetersImport.lua <remoteHost[:port]> [<startTimeStamp> [<endTimeStamp>] ]
+Imports the remote data starting at startTimeStamp and ending at endTimeStamp.
+Timestamps may be specified as unixtime integers, as ISO YYYY-MM-DD hh:mm::ss strings or as offset in
+days ("2d") or hours ("48h") from now.
 Needs to be run from the main app folder, since it loads app components.
 --]]
 
@@ -17,6 +18,7 @@ Needs to be run from the main app folder, since it loads app components.
 local socket = require("socket")
 local lzlib = require("zlib")
 local db = require("db")
+local utils = require("utils")
 
 
 
@@ -219,11 +221,8 @@ end
 --- Main entrypoint:
 local args = {...}
 local remoteHost, remotePort = parseRemote(args[1] or "localhost:5551")
-local startOffset = parseOffset(args[2] or "10d")
-local endOffset = parseOffset(args[3] or "0d")
-local now = os.time()
-local startTS = now - startOffset
-local endTS = now - endOffset
+local startTS = utils.parseTimeStamp(args[2] or "5d")
+local endTS = utils.parseTimeStamp(args[3] or "0h")
 
 importFromRemote(remoteHost, remotePort, startTS, endTS)
 

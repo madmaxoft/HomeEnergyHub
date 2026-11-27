@@ -211,6 +211,7 @@ end
 
 -- Open the DB:
 gDB = assert(sqlite.open(gDBFileName, sqlite.OPEN_READONLY))
+gDB:busy_timeout(3000)
 
 -- Start the server:
 local serverSocket = assert(socket.bind("*", gPort))

@@ -48,5 +48,16 @@ end
 
 
 
+local function testTimestampParser()
+	assert(utils.parseTimeStamp("123456789") == 123456789)
+	assert(utils.parseTimeStamp("2026-11-26 6:45:31") == 1795668331)
+	assert(math.abs(utils.parseTimeStamp("4d") - (os.time() - 4 * 24 * 60 * 60)) <= 1)
+end
+
+
+
+
+
 testNextDayYmd()
 testPrevDayYmd()
+testTimestampParser()

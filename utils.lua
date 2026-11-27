@@ -304,6 +304,59 @@ end
 
 
 
+--- Parses a timestamp from the string into a unixtime.
+-- Returns the timestamp, or nil and message on error.
+-- Accepts either a unixtime integer, an ISO string "YYYY-MM-DD hh:mm:ss" or an offset from now specified
+-- either in days ("4d") or hours ("48h").
+function M.parseTimeStamp(aTimeStampStr)
+	assert(type(aTimeStampStr) == "string")
+
+	-- Parse a Unix timestamp:
+	local timeStamp = tonumber(aTimeStampStr)
+	if (timeStamp) then
+		return math.floor(timeStamp + 0.5)
+	end
+
+	-- Parse a relative offset:
+	local offset, unit = aTimeStampStr:match("^(%d+)([dh])$")
+	if (offset) then
+		offset = tonumber(offset)
+		if (unit == "d") then
+			offset = offset * 86400
+		else
+			offset = offset * 3600
+		end
+		return os.time() - offset
+	end
+
+	-- Parse an ISO timestamp as UTC:
+	local year, month, day, hour, min, sec = aTimeStampStr:match(
+		"^(%d%d%d%d)%-(%d%d)%-(%d%d)[Tt ](%d?%d):(%d%d):(%d%d)$"
+	)
+	if not(year) then
+		return nil, "Unrecognized timestamp format"
+	end
+	local utcTime = os.time({
+		year = year,
+		month = month,
+		day = day,
+		hour = hour,
+		min = min,
+		sec = sec,
+		isdst = false,
+	})
+
+	-- Convert the local-time interpretation to UTC:
+	local localTime = os.date("*t", utcTime)
+	local utcOffset = os.difftime(os.time(localTime), os.time(os.date("!*t", utcTime)))
+
+	return utcTime - utcOffset
+end
+
+
+
+
+
 --- Returns the YMD representation of the day preceding the specified date.
 -- Returns nil and optional error message if the specified date is not valid
 function M.prevDayYmd(aDateStr)

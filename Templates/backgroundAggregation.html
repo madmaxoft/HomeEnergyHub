@@ -57,11 +57,11 @@ end
 	<table>
 		<tr>
 			<td>Start timestamp</td>
-			<td><input type="text" name="startTS" value="<%= range.minTimeStamp %>" style="width:200px" /></td>
+			<td><input type="text" name="startTS" value="<%= utils.timeStampToYmdHms(range.minTimeStamp) %>" style="width:300px" /></td>
 		</tr>
 		<tr>
 			<td>End timestamp</td>
-			<td><input type="text" name="endTS" value="<%= range.maxTimeStamp %>" style="width:200px" /></td>
+			<td><input type="text" name="endTS" value="<%= utils.timeStampToYmdHms(range.maxTimeStamp) %>" style="width:300px" /></td>
 		</tr>
 		<tr>
 			<td />

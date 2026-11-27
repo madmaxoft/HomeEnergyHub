@@ -48,13 +48,23 @@ function M.postSetRange(aRequest, aResponse)
 	if not(m) then
 		return aResponse:sendError(400, "Failed to parse form data.")
 	end
-	local startTS = tonumber(m.startts)
-	if not(startTS) then
-		return aResponse:sendError(400, "Missing or invalid 'startTS' field.")
+	local startTSStr = m.startts
+	if not(startTSStr) then
+		return aResponse:sendError(400, "Missing 'startTS' field.")
 	end
-	local endTS = tonumber(m.endts)
+	local endTSStr = m.endts
+	if not(endTSStr) then
+		return aResponse:sendError(400, "Missing 'endTS' field.")
+	end
+
+	-- Convert to timestamp:
+	local startTS, msg = utils.parseTimeStamp(startTSStr)
+	if not(startTS) then
+		return aResponse:sendError(400, "Invalid 'startTS' field: " .. tostring(msg))
+	end
+	local endTS, msg = utils.parseTimeStamp(endTSStr)
 	if not(endTS) then
-		return aResponse:sendError(400, "Missing or invalid 'endTS' field.")
+		return aResponse:sendError(400, "Invalid 'endTS' field: " .. tostring(msg))
 	end
 
 	bat.setRange(startTS, endTS)

@@ -222,6 +222,10 @@ while not(gShouldTerminate) do
 	local client = serverSocket:accept()
 	client:settimeout(5)
 	if (client) then
-		serveClient(client)
+		local isSuccess, msg = pcall(serveClient, client)
+		if not(isSuccess) then
+			printStr("Failed to serve client: %s", tostring(msg))
+		end
+		client:close()
 	end
 end

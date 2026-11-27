@@ -271,6 +271,13 @@ local upgrades = {
 		]],
 	},
 
+	-- Version 10:
+	{
+		-- Drop the index, it is not needed since timeStamp is already a primary integer key (rowid):
+		[[
+			DROP INDEX idx_ElectricityConsumption_timeStamp;
+		]],
+	},
 	-- Future upgrades can be added here
 }
 
